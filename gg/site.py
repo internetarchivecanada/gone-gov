@@ -238,7 +238,7 @@ def build(out):
             '<tr><td>%s/%s</td><td><a href="c/%s.html">%s</a></td><td class="num">%s</td></tr>' % (esc(h), esc(seg), slug, esc(short), n(k)) for k, h, seg, slug, short in sec_top if k))
     looked = total['wb'] + total['nowb']
     left = lost - looked
-    wb_big = pct(total['wb'], looked) if looked else '–'
+    wb_big = ('%.1f%%' % (100.0 * total['wb'] / looked)) if looked else '–'
     if left > 0:
         wb_text = 'of the %s looked up so far have a working copy in the Wayback Machine (%s still to look up)' % (n(looked), n(left))
     else:
