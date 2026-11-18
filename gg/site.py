@@ -10,7 +10,7 @@ from gg.classify import catchalls, status
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BASE = 'https://wayback-labs.sf.archive.org/gone-gov/'
-V = '3'
+V = '4'
 MIRROR_KEYS = ['cdc.gov', 'epa.gov', 'usaid.gov', 'sealevel.globalchange.gov', 'globalchange.gov', 'climate.gov',
                'fema.gov', 'ed.gov', 'imls.gov', 'covid.gov', 'coralreef.gov']
 STATUS_LABEL = {'gone': 'Gone', 'away': 'Redirected away', 'moved': 'Moved', 'live': 'Still online',
@@ -219,7 +219,7 @@ def build(out):
 <p class="lede">%s addresses (%s documents) from Webrecorder's <a href="https://app.browsertrix.com/explore/usgov-archive/collections/%s">%s collection</a>, captured %s. Checked on the live web: %s so far.</p>
 %s
 %s
-<h2 id="list">Gone or redirected away</h2>
+<h2 id="gone">Gone or redirected away</h2>
 <div id="app" data-slug="%s" data-rel="../"><p>Loading the list…</p></div>
 <h2>By website</h2>
 <div class="scroll"><table class="tab"><thead><tr><th>Host</th><th class="num">Addresses</th><th class="num">Gone</th><th class="num">Redirected away</th><th class="num">Moved</th><th class="num">Online</th><th class="num">Other</th></tr></thead><tbody>%s</tbody></table></div>

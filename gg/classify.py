@@ -4,7 +4,7 @@ live     answers 200 at the same address (or a trivial redirect: http->https, ww
 moved    redirects to a specific other page (one-to-one); probably still online elsewhere
 away     redirects to a homepage, or to a page that many old addresses now land on (catch-all)
 gone     404/410, a "page not found" page served with 200, or the host no longer exists / refuses connections
-blocked  the site answers automated requests with a Cloudflare challenge; can't be checked
+blocked  the site refuses automated requests (Cloudflare / AWS WAF challenge, Akamai "Access Denied", 403, 429)
 unclear  other errors: 401/403, 429, 5xx, timeouts, TLS failures
 """
 import re, urllib.parse
@@ -29,7 +29,7 @@ def catchalls(lives, min_sources=25):
 
 def status(r, catch):
     st = r.get('st')
-    if st == 'blocked' or r.get('cf'):
+    if st == 'blocked' or r.get('cf') or r.get('blk'):
         return 'blocked'
     if st in ('dns', 'refused'):
         return 'gone'
@@ -38,7 +38,7 @@ def status(r, catch):
         redirected = f and norm(f) != norm(r['u'])
         if st in GONE_CODES:
             return 'gone'
-        if 200 <= st < 300:
+        if st in (200, 203):
             if redirected:
                 if norm(f) in catch or (is_home(f) and not is_home(r['u'])):
                     return 'away'

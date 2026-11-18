@@ -1,56 +1,76 @@
 """Check each listed address on the live web today.
 
-python3 -m gg.live [slug ...]      -> data/live/<slug>.jsonl (append-only, resumable)
-python3 -m gg.live --retry [slug]   re-check rows that ended in a timeout, 429 or 5xx (slower)
+python3 -m gg.live [slug ...]      -> data/live/<slug>.jsonl (append-only, resumable; the last row per address wins)
+python3 -m gg.live --retry [slug]   same, slower (2 s between requests per host)
 
-Per-host politeness: 2 requests at a time (4 for hosts with >50,000 addresses). A host whose answers are
-Cloudflare challenges is marked blocked after 20 such answers and its remaining addresses are not requested.
+Asks again about rows that ended blocked, refused, 401/403/429/5xx, timed out or failed TLS, once the last try
+is more than six hours old.
+
+Per-host politeness: one request at a time (two for hosts with >50,000 addresses), 0.5 s apart. A host that
+refuses automated requests (Cloudflare or AWS WAF challenge, Akamai "Access Denied", bare 403, 429) 15 times in a
+row without ever answering is marked blocked and its remaining addresses are not requested. A host that did
+answer before is assumed to be rate limiting: pause 15 minutes, give up for this run after 3 pauses.
 A host whose name no longer resolves is marked dns for every address without further requests.
 No challenge solving, no browser impersonation: the User-Agent names this project.
+Run with Homebrew Python (/opt/homebrew/bin/python3) on the studio: the system Python's LibreSSL has no TLS 1.3.
 """
-import json, os, re, socket, ssl, sys, threading, time, urllib.error, urllib.parse
+import html, json, os, re, socket, ssl, sys, threading, time, urllib.error, urllib.parse
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
-from gg.common import COLLECTIONS, DATA, UA, get, jsonl, host_of
+from gg.common import COLLECTIONS, DATA, get, jsonl
 
 TITLE = re.compile(rb'<title[^>]*>(.*?)</title>', re.S | re.I)
+RECHECK_AGE = int(os.environ.get("GG_RECHECK_AGE", 6 * 3600))
 lock = threading.Lock()
+
+
+def now():
+    return time.strftime('%Y%m%d%H%M%S', time.gmtime())
+
 
 def title_of(b):
     m = TITLE.search(b)
     if not m:
         return ''
-    import html
     return re.sub(r'\s+', ' ', html.unescape(m.group(1).decode('utf-8', 'replace'))).strip()[:300]
 
+
 def check(u):
-    rec = {'u': u, 'at': time.strftime('%Y%m%d%H%M%S', time.gmtime())}
+    rec = {'u': u, 'at': now()}
     try:
         r = get(u, timeout=40, headers={'Accept': 'text/html,application/xhtml+xml,application/pdf,*/*;q=0.8'})
         rec['st'] = r.status
-        body = b''
         ct = r.headers.get('Content-Type', '')
-        if 'html' in ct:
-            body = r.read(65536)
-            rec['t'] = title_of(body)
-        r.close()
         rec['ct'] = ct.split(';')[0][:60]
+        if r.status == 202 or r.headers.get('x-amzn-waf-action'):
+            rec['blk'] = 'aws-waf' if r.headers.get('x-amzn-waf-action') else 'challenge'
+        elif 'html' in ct:
+            rec['t'] = title_of(r.read(65536))
+        r.close()
         if r.geturl() != u:
             rec['f'] = r.geturl()
     except urllib.error.HTTPError as e:
         rec['st'] = e.code
         if e.geturl() != u:
             rec['f'] = e.geturl()
-        if e.headers.get('cf-mitigated') == 'challenge':
-            rec['cf'] = 1
         try:
             body = e.read(65536)
-            if b'challenges.cloudflare.com' in body or b'Just a moment' in body:
-                rec['cf'] = 1
-            elif e.code in (404, 410):
-                rec['t'] = title_of(body)
         except Exception:
-            pass
+            body = b''
+        server = e.headers.get('Server') or ''
+        if e.headers.get('cf-mitigated') == 'challenge' or b'challenges.cloudflare.com' in body:
+            rec['cf'] = 1
+            rec['blk'] = 'cloudflare'
+        elif e.headers.get('x-amzn-waf-action'):
+            rec['blk'] = 'aws-waf'
+        elif e.code == 429:
+            rec['blk'] = 'rate'
+        elif e.code == 403 and (b'Access Denied' in body or 'Akamai' in server):
+            rec['blk'] = 'akamai'
+        elif e.code == 403:
+            rec['blk'] = 'forbidden'
+        elif e.code in (404, 410):
+            rec['t'] = title_of(body)
     except urllib.error.URLError as e:
         reason = e.reason
         if isinstance(reason, socket.gaierror):
@@ -71,6 +91,7 @@ def check(u):
         rec['e'] = (type(e).__name__ + ': ' + str(e))[:120]
     return rec
 
+
 def dns_ok(host):
     for h in (host, 'www.' + host):
         try:
@@ -82,6 +103,20 @@ def dns_ok(host):
             return True
     return False
 
+
+def recheck(prev):
+    st = prev.get('st')
+    bad = st in ('timeout', 'err', 'refused', 'tls', 'blocked') or prev.get('blk') or prev.get('cf') or \
+        (isinstance(st, int) and (st in (202, 401, 403, 429) or st >= 500))
+    if not bad:
+        return False
+    try:
+        t = time.mktime(time.strptime(prev.get('at', '19700101000000'), '%Y%m%d%H%M%S')) - time.timezone
+    except ValueError:
+        return True
+    return time.time() - t > RECHECK_AGE
+
+
 def run(slug, retry=False):
     os.makedirs(os.path.join(DATA, 'live'), exist_ok=True)
     path = os.path.join(DATA, 'live', slug + '.jsonl')
@@ -91,55 +126,71 @@ def run(slug, retry=False):
     todo = []
     for d in jsonl(os.path.join(DATA, 'lists', slug + '.jsonl')):
         prev = last.get(d['u'])
-        if prev is None:
-            todo.append(d['u'])
-        elif retry and (prev['st'] in ('timeout', 'err', 'refused', 'tls') or (isinstance(prev['st'], int) and (prev['st'] == 429 or prev['st'] >= 500))):
+        if prev is None or recheck(prev):
             todo.append(d['u'])
     byhost = defaultdict(list)
     for u in todo:
         byhost[urllib.parse.urlsplit(u).netloc.lower()].append(u)
-    print(slug, len(todo), 'to check on', len(byhost), 'hosts', flush=True)
+    print(slug, len(todo), 'to check on', len(byhost), 'hosts', time.strftime('%H:%M:%S'), flush=True)
     out = open(path, 'a')
-    stats = defaultdict(int)
+    count = [0]
 
     def write(rec):
         with lock:
             out.write(json.dumps(rec) + '\n')
-            stats['n'] += 1
-            if stats['n'] % 1000 == 0:
+            count[0] += 1
+            if count[0] % 1000 == 0:
                 out.flush()
-                print(slug, stats['n'], '/', len(todo), time.strftime('%H:%M:%S'), flush=True)
+                print(slug, count[0], '/', len(todo), time.strftime('%H:%M:%S'), flush=True)
 
     def host_job(host, urls, step, start, state):
+        pauses = 0
         for u in urls[start::step]:
             if state.get('dns'):
-                write({'u': u, 'st': 'dns', 'at': time.strftime('%Y%m%d%H%M%S', time.gmtime()), 'e': 'host does not resolve'}); continue
-            if state.get('blocked', 0) >= 20 and not state.get('ok'):
-                write({'u': u, 'st': 'blocked', 'cf': 1, 'at': time.strftime('%Y%m%d%H%M%S', time.gmtime())}); continue
+                write({'u': u, 'st': 'dns', 'at': now(), 'e': 'host does not resolve'})
+                continue
+            if state.get('blocked'):
+                write({'u': u, 'st': 'blocked', 'blk': state['blocked'], 'at': now()})
+                continue
+            if state.get('stop'):
+                return
             rec = check(u)
-            if rec.get('cf'):
-                state['blocked'] = state.get('blocked', 0) + 1
-            elif rec['st'] not in ('timeout', 'err') and not (rec['st'] == 403):
-                state['ok'] = True
             write(rec)
-            delay = 1.0 if retry else 0.15
-            if rec['st'] == 429:
-                delay = 30
-            time.sleep(delay)
+            if rec.get('blk'):
+                state['refused'] = state.get('refused', 0) + 1
+                if state['refused'] >= 15:
+                    if not state.get('ok'):
+                        state['blocked'] = rec['blk']
+                        print(slug, host, 'blocked:', rec['blk'], flush=True)
+                    else:
+                        pauses += 1
+                        if pauses > 3:
+                            state['stop'] = True
+                            print(slug, host, 'still refusing after 3 pauses; left for a later run', flush=True)
+                            return
+                        print(slug, host, 'refusing (%s); pausing 15 min' % rec['blk'], flush=True)
+                        time.sleep(900)
+                        state['refused'] = 0
+            elif rec['st'] not in ('timeout', 'err'):
+                state['ok'] = True
+                state['refused'] = 0
+            time.sleep(2.0 if retry else 0.5)
 
     jobs = []
-    with ThreadPoolExecutor(64) as ex:
+    with ThreadPoolExecutor(48) as ex:
         for host, urls in sorted(byhost.items(), key=lambda kv: -len(kv[1])):
             state = {}
-            if not dns_ok(host.split(':')[0].removeprefix('www.')):
+            h = host.split(':')[0]
+            if not dns_ok(h[4:] if h.startswith('www.') else h):
                 state['dns'] = True
-            step = 1 if retry else (4 if len(urls) > 50000 else 2)
+            step = 1 if retry else (2 if len(urls) > 50000 else 1)
             for s in range(step):
                 jobs.append(ex.submit(host_job, host, urls, step, s, state))
         for j in jobs:
             j.result()
     out.close()
-    print(slug, 'done', stats['n'], flush=True)
+    print(slug, 'done', count[0], time.strftime('%H:%M:%S'), flush=True)
+
 
 if __name__ == '__main__':
     args = [a for a in sys.argv[1:] if not a.startswith('--')]
