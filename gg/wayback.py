@@ -60,9 +60,22 @@ def prefix_host(host, urls, write):
     except Exception:
         return set()
     caps = defaultdict(list)
+    cache = os.path.join(DATA, 'wayback', 'prefix', host)
+    os.makedirs(cache, exist_ok=True)
     for pg in range(pages):
-        txt = cdx_raw({'url': host + '/', 'matchType': 'prefix', 'fl': 'original,timestamp,statuscode', 'page': str(pg)})
-        for line in (txt or '').splitlines():
+        cf = os.path.join(cache, '%05d.txt' % pg)
+        if os.path.exists(cf):
+            lines = open(cf).read().splitlines()
+        else:
+            txt = cdx_raw({'url': host + '/', 'matchType': 'prefix', 'fl': 'original,timestamp,statuscode', 'page': str(pg)})
+            if txt is None:
+                print(host, 'page', pg, 'failed; will retry on the next run', flush=True)
+                return set()
+            lines = [l for l in txt.splitlines() if len(l.split(' ')) == 3 and key(l.split(' ')[0]) in want]
+            with open(cf + '.tmp', 'w') as f:
+                f.write('\n'.join(lines))
+            os.replace(cf + '.tmp', cf)   # only kept captures matching our addresses; a reboot resumes here
+        for line in lines:
             parts = line.split(' ')
             if len(parts) != 3:
                 continue

@@ -10,7 +10,7 @@ from gg.classify import catchalls, status
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BASE = 'https://wayback-labs.sf.archive.org/gone-gov/'
-V = '7'
+V = '8'
 STATUS_LABEL = {'gone': 'Gone', 'away': 'Redirected away', 'moved': 'Moved', 'live': 'Still online',
                 'blocked': "Can't be checked", 'unclear': 'Unclear', 'pending': 'Not yet checked'}
 
@@ -236,6 +236,13 @@ def build(out):
     if sec_top:
         hl.append('<h3>Biggest losses by section</h3><div class="scroll"><table class="tab"><thead><tr><th>Section</th><th>Collection</th><th class="num">Gone or redirected away</th></tr></thead><tbody>%s</tbody></table></div>' % ''.join(
             '<tr><td>%s/%s</td><td><a href="c/%s.html">%s</a></td><td class="num">%s</td></tr>' % (esc(h), esc(seg), slug, esc(short), n(k)) for k, h, seg, slug, short in sec_top if k))
+    looked = total['wb'] + total['nowb']
+    left = lost - looked
+    wb_big = pct(total['wb'], looked) if looked else '–'
+    if left > 0:
+        wb_text = 'of the %s looked up so far have a working copy in the Wayback Machine (%s still to look up)' % (n(looked), n(left))
+    else:
+        wb_text = 'have a working copy in the Wayback Machine (%s of %s)' % (n(total['wb']), n(looked))
     progress = ''
     if total['pending'] or total['vchecked'] < total['videos']:
         progress = '<p class="note">Checks are still running: %s of %s addresses and %s of %s videos checked so far. This page rebuilds every 30 minutes.</p>' % (
@@ -246,7 +253,7 @@ def build(out):
 <div class="stats">
 <div><b>%s</b><span>gone (404, deleted site, “not found” page)</span></div>
 <div><b>%s</b><span>redirected away (to a homepage or a catch-all page)</span></div>
-<div><b>%s</b><span>of those have a working copy in the Wayback Machine</span></div>
+<div><b>%s</b><span>%s</span></div>
 <div><b>%s</b><span>embedded YouTube videos no longer play</span></div>
 </div>
 <h2>Collections</h2>
@@ -258,7 +265,7 @@ def build(out):
 <h2>Highlights</h2>
 %s''' % (
         n(total['all']), n(lost), (' (of %s checked so far)' % n(checked)) if total['pending'] else '', progress,
-        n(total['gone']), n(total['away']), n(total['wb']), n(total['vgone']), cards, n(sum(allmonths.values())), chart(allmonths, 'when'), ''.join(hl))
+        n(total['gone']), n(total['away']), wb_big, wb_text, n(total['vgone']), cards, n(sum(allmonths.values())), chart(allmonths, 'when'), ''.join(hl))
     open(os.path.join(out, 'index.html'), 'w').write(page('Gone from .gov', body, '', 'home', 'Pages from ten US government websites archived in 2024–25 that are gone from the live web today, with links to Wayback Machine copies.'))
     # videos page
     vrows = []

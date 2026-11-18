@@ -29,8 +29,8 @@ python3 -m gg.site OUT            # static site
 ```
 
 Data lives in `$GG_DATA` (studio: `/Volumes/4tb-ext/data/gone-gov`, symlinked as `data/` in `~/gone-gov-work`, where
-the jobs run). `tools/live-all.sh` and `tools/after-live.sh` chain the steps per collection (screen sessions
-`gg-live`, `gg-after`); `tools/rebuild-loop.sh` rebuilds `/opt/services/gone-gov/public` every 30 minutes (screen
+the jobs run). `tools/live-all.sh` runs the live checks (screen `gg-live`), `tools/wayback-loop.sh` the Wayback lookups, one
+collection at a time and repeating (screen `gg-wayback`), `tools/after-live.sh` the video checks (screen `gg-after`). `tools/rebuild-loop.sh` rebuilds `/opt/services/gone-gov/public` every 30 minutes (screen
 `gg-site`). Screen sessions don't survive a studio reboot; every step is resumable, so start them again. Quitting a
 screen session leaves its program running: kill old PIDs (`ps -axo pid,lstart,command | grep gg.`).
 
