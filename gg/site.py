@@ -213,7 +213,7 @@ def build(out):
             esc(h), n(sum(hc[k] for k in STATUS_LABEL)), n(hc['gone']), n(hc['away']), n(hc['moved']), n(hc['live']), n(hc['blocked'] + hc['unclear'] + hc['pending'])) for h, hc in htab[:40])
         nosec = ''
         if c.get('blocked'):
-            nosec = '<p class="note"><b>%s addresses can\'t be checked.</b> Their site answers automated requests with a Cloudflare challenge page, and the Wayback Machine\'s own recent visits get the same answer. They are left out of the list below rather than guessed at.</p>' % n(c['blocked'])
+            nosec = '<p class="note"><b>%s addresses can\'t be checked.</b> Their site refuses automated requests (a Cloudflare or AWS challenge page, or Akamai\'s “Access Denied”). We don\'t try to get around that, so these addresses are left out of the list below rather than guessed at. Some refusals may lift; they are asked again on later passes.</p>' % n(c['blocked'])
         body = '''<p class="crumb"><a href="../index.html">Overview</a> › %s</p>
 <h1>%s</h1>
 <p class="lede">%s addresses (%s documents) from Webrecorder's <a href="https://app.browsertrix.com/explore/usgov-archive/collections/%s">%s collection</a>, captured %s. Checked on the live web: %s so far.</p>
@@ -307,7 +307,7 @@ ABOUT = '''<h1>About</h1>
 <li><b>Gone</b>: the live site answers 404 or 410, serves a “page not found” page, or the site's name no longer resolves at all.</li>
 <li><b>Redirected away</b>: the address now forwards to a homepage, or to a page that at least 25 old addresses land on (for example COVID.gov's pages now forward to a single White House page).</li>
 <li><b>Moved</b>: forwards to a specific other page; the content is probably still online. Counted but not listed.</li>
-<li><b>Can't be checked</b>: the site (ed.gov, fema.gov and usaid.gov among them) answers every automated request with a Cloudflare challenge. We don't try to get around it, and the Wayback Machine's own crawler gets the same answer, so these are left out of the lists.</li>
+<li><b>Can't be checked</b>: the site refuses automated requests: a Cloudflare challenge (www.ed.gov, www.usaid.gov), an AWS challenge (climate.gov) or Akamai's “Access Denied” (www.fema.gov). We don't try to get around it, so these are left out of the lists. On www.ed.gov the Wayback Machine's own crawler gets the same refusal. A site that answers at first and then starts refusing is treated as rate limiting: the check pauses and asks again later.</li>
 </ul>
 <p>Requests name this project in their User-Agent and go at most two to four at a time per site. Timeouts and server errors are tried again more slowly.</p>
 <h2>Wayback Machine evidence</h2>
