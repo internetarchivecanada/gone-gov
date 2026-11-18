@@ -10,7 +10,7 @@ from gg.classify import catchalls, status
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BASE = 'https://wayback-labs.sf.archive.org/gone-gov/'
-V = '8'
+V = '9'
 STATUS_LABEL = {'gone': 'Gone', 'away': 'Redirected away', 'moved': 'Moved', 'live': 'Still online',
                 'blocked': "Can't be checked", 'unclear': 'Unclear', 'pending': 'Not yet checked'}
 
@@ -220,8 +220,8 @@ def build(out):
     # front page
     checked = sum(total[k] for k in ('gone', 'away', 'moved', 'live', 'blocked', 'unclear'))
     lost = total['gone'] + total['away']
-    cards = ''.join('''<a class="card" href="c/%s.html"><h3>%s</h3>%s<p class="small">%s addresses · %s checked · <b>%s gone or redirected away</b>%s</p></a>''' % (
-        s['slug'], esc(s['short']), bars_html(s, small=True), n(s['total']), pct(s['checked'], s['total']), n(s['c'].get('gone', 0) + s['c'].get('away', 0)),
+    cards = ''.join('''<a class="card" href="c/%s.html"><h3>%s</h3>%s<p class="small">%s archived addresses%s</p></a>''' % (
+        s['slug'], esc(s['short']), bars_html(s, small=True), n(s['total']),
         (' · %s of %s videos unplayable' % (n(s['vgone']), n(s['vchecked']))) if s['vchecked'] else '') for s in summary)
     hl = []
     if deadhosts:
@@ -258,7 +258,7 @@ def build(out):
 </div>
 <h2>Collections</h2>
 <div class="cards">%s</div>
-<p class="legend"><span class="k gone"></span>Gone <span class="k away"></span>Redirected away <span class="k moved"></span>Moved <span class="k live"></span>Still online <span class="k other"></span>Can't be checked, unclear or not yet checked</p>
+<p class="legend">Each bar is every archived address in that collection, split by what the live web does with it today. Hover over a segment for its count.</p>
 <h2 id="when">When they disappeared</h2>
 <p>Month of the first Wayback Machine capture that found the address missing, after its last working capture. Only addresses the Wayback Machine visited both before and after removal are counted (%s).</p>
 %s
@@ -290,13 +290,21 @@ def build(out):
     json.dump({'built': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()), 'total': total, 'collections': summary}, open(os.path.join(out, 'data', 'summary.json'), 'w'), indent=1)
     print('built', out, dict(total))
 
+SEG = [('gone', 'Gone'), ('away', 'Redirected away'), ('moved', 'Moved elsewhere'), ('live', 'Still online'),
+       ('blocked', "Site refuses checks"), ('unclear', 'Unclear (errors)'), ('pending', 'Not checked yet')]
+
 def bars_html(s, small=False):
+    """Stacked bar of every address in a collection by status, with a hover tooltip per segment and a key under it."""
     c = s['c']; t = float(s['total']) or 1
-    parts = [('gone', c.get('gone', 0)), ('away', c.get('away', 0)), ('moved', c.get('moved', 0)), ('live', c.get('live', 0)),
-             ('other', c.get('blocked', 0) + c.get('unclear', 0) + c.get('pending', 0))]
-    segs = ''.join('<span class="%s" style="width:%.2f%%" title="%s: %s"></span>' % (k, 100 * v / t, {'gone': 'Gone', 'away': 'Redirected away', 'moved': 'Moved', 'live': 'Still online', 'other': "Can't be checked, unclear or not yet checked"}[k], n(v)) for k, v in parts if v)
-    lab = '' if small else '<p class="small">%s</p>' % ' · '.join('%s %s' % (n(v), {'gone': 'gone', 'away': 'redirected away', 'moved': 'moved', 'live': 'still online', 'other': "can't be checked, unclear or not yet checked"}[k]) for k, v in parts if v)
-    return '<div class="sbar%s" role="img" aria-label="%s">%s</div>%s' % (' small' if small else '', esc('; '.join('%s %s' % (n(v), k) for k, v in parts)), segs, lab)
+    parts = [(k, lab, c.get(k, 0)) for k, lab in SEG if c.get(k, 0)]
+    def share(v):
+        p = 100.0 * v / t
+        return '%.1f%%' % p if p < 10 else '%d%%' % round(p)
+    segs = ''.join('<span class="%s" style="flex-grow:%d" data-tip="%s: %s (%s)"></span>' % (k, v, esc(lab), n(v), share(v)) for k, lab, v in parts)
+    key = ''.join('<li><span class="k %s"></span>%s <b>%s</b> <span class="muted">%s</span></li>' % (k, esc(lab), n(v), share(v)) for k, lab, v in parts)
+    aria = '; '.join('%s %s' % (lab, n(v)) for k, lab, v in parts)
+    return '<div class="sbar%s" role="img" aria-label="%s">%s</div><ul class="key%s">%s</ul>' % (
+        ' small' if small else '', esc('Addresses by status: ' + aria), segs, ' small' if small else '', key)
 
 ABOUT = '''<h1>About</h1>
 <p class="lede">Gone from .gov shows which pages and documents from ten archived US government websites are no longer on the live web, and where a working copy can still be found.</p>
@@ -306,8 +314,10 @@ ABOUT = '''<h1>About</h1>
 <ul>
 <li><b>Gone</b>: the live site answers 404 or 410, serves a “page not found” page, or the site's name no longer resolves at all.</li>
 <li><b>Redirected away</b>: the address now forwards to a homepage, or to a page that at least 25 old addresses land on (for example COVID.gov's pages now forward to a single White House page).</li>
-<li><b>Moved</b>: forwards to a specific other page; the content is probably still online. Counted but not listed.</li>
-<li><b>Can't be checked</b>: the site refuses automated requests: a Cloudflare challenge (www.ed.gov, www.usaid.gov), an AWS challenge (climate.gov) or Akamai's “Access Denied” (www.fema.gov). We don't try to get around it, so these are left out of the lists. On www.ed.gov the Wayback Machine's own crawler gets the same refusal. A site that answers at first and then starts refusing is treated as rate limiting: the check pauses and asks again later.</li>
+<li><b>Moved elsewhere</b>: forwards to a specific other page; the content is probably still online. Counted but not listed.</li>
+<li><b>Site refuses checks</b>: the site refuses automated requests: a Cloudflare challenge (www.ed.gov, www.usaid.gov), an AWS challenge (climate.gov) or Akamai's “Access Denied” (www.fema.gov). We don't try to get around it, so these are left out of the lists. On www.ed.gov the Wayback Machine's own crawler gets the same refusal. A site that answers at first and then starts refusing is treated as rate limiting: the check pauses and asks again later.</li>
+<li><b>Unclear (errors)</b>: timeouts, server errors and other answers that say nothing about the page.</li>
+<li><b>Not checked yet</b>: still in the queue.</li>
 </ul>
 <p>Requests name this project in their User-Agent and go at most two to four at a time per site. Timeouts and server errors are tried again more slowly.</p>
 <h2>Wayback Machine evidence</h2>
