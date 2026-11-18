@@ -57,3 +57,8 @@ footer{border-top:1px solid var(--line);color:var(--muted);font-size:14px;paddin
 code{font-size:14px}
 @media (max-width:760px){.stats{grid-template-columns:1fr 1fr}.controls{grid-template-columns:1fr 1fr}.controls .q{grid-column:1/-1}h1{font-size:28px}}
 .vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+footer{display:flex;gap:14px;align-items:flex-start}
+footer .ia{flex:none;margin-top:14px}footer .ia img{display:block;width:40px;height:40px}
+footer p{margin:12px 0 0}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) footer .ia img{background:#fff;border-radius:50%}}
+:root[data-theme="dark"] footer .ia img{background:#fff;border-radius:50%}

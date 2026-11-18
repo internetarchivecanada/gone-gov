@@ -10,7 +10,7 @@ from gg.classify import catchalls, status
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BASE = 'https://wayback-labs.sf.archive.org/gone-gov/'
-V = '4'
+V = '5'
 MIRROR_KEYS = ['cdc.gov', 'epa.gov', 'usaid.gov', 'sealevel.globalchange.gov', 'globalchange.gov', 'climate.gov',
                'fema.gov', 'ed.gov', 'imls.gov', 'covid.gov', 'coralreef.gov']
 STATUS_LABEL = {'gone': 'Gone', 'away': 'Redirected away', 'moved': 'Moved', 'live': 'Still online',
@@ -71,10 +71,12 @@ def page(title, body, rel='', active='', desc=''):
 <nav aria-label="Main">%s</nav>
 </div></header>
 <main id="main" class="wrap">%s</main>
-<footer class="wrap"><p>A <a href="https://wayback-labs.sf.archive.org/">Wayback Machine Labs</a> experiment by the Internet Archive.
-Lists of archived addresses: <a href="https://govarchive.us/">Webrecorder US Government Web Archive</a>.
-Earlier copies: <a href="https://web.archive.org/">Wayback Machine</a>. Made by Claude (an AI model by Anthropic) at the direction of Mark Graham. <a href="%sabout.html">How this works</a>.</p></footer>
-</body></html>''' % (esc(title), esc(desc), rel, rel, V, rel, rel, nav, body, rel)
+<footer class="wrap"><a class="ia" href="https://archive.org/"><img src="%sinternet-archive.png" alt="Internet Archive" width="40" height="40"></a>
+<div><p>A <a href="https://wayback-labs.sf.archive.org/">Wayback Machine Labs</a> experiment, <a href="https://archive.org/">Internet Archive</a>.
+Feedback? <a href="mailto:info@archive.org?subject=Gone%%20from%%20.gov">Email us</a>.</p>
+<p>Lists of archived addresses: the <a href="https://govarchive.us/">Webrecorder US Government Web Archive</a>. Earlier copies: the <a href="https://web.archive.org/">Wayback Machine</a>.
+Made by Claude (Anthropic) at the direction of Mark Graham. <a href="%sabout.html">About this site</a> · <a href="%sabout.html#accessibility">Accessibility</a></p></div></footer>
+</body></html>''' % (esc(title), esc(desc), rel, rel, V, rel, rel, nav, body, rel, rel, rel)
 
 def load(slug):
     rows = list(jsonl(os.path.join(DATA, 'lists', slug + '.jsonl')))
@@ -139,7 +141,7 @@ def chart(months, title_id):
 def build(out):
     os.makedirs(os.path.join(out, 'c'), exist_ok=True)
     os.makedirs(os.path.join(out, 'data'), exist_ok=True)
-    for f in ('style.css', 'app.js', 'favicon.svg'):
+    for f in ('style.css', 'app.js', 'favicon.svg', 'internet-archive.png'):
         shutil.copy(os.path.join(HERE, 'assets', f), os.path.join(out, f))
     summary = []
     allmonths = Counter()
@@ -286,7 +288,10 @@ def build(out):
     open(os.path.join(out, 'videos.html'), 'w').write(page('Videos – Gone from .gov', vbody, '', 'videos', 'YouTube videos embedded on archived US government pages that no longer play.'))
     open(os.path.join(out, 'about.html'), 'w').write(page('About – Gone from .gov', ABOUT % {'built': time.strftime('%-d %B %Y %H:%M UTC', time.gmtime())}, '', 'about', 'How Gone from .gov was made.'))
     open(os.path.join(out, '404.html'), 'w').write(page('Not found – Gone from .gov', '<h1>Not here either</h1><p>This address isn\'t part of the site. <a href="index.html">Back to the overview</a>.</p>', '/gone-gov/'))
-    open(os.path.join(out, 'robots.txt'), 'w').write('User-agent: *\nAllow: /\n')
+    open(os.path.join(out, 'robots.txt'), 'w').write('User-agent: *\nAllow: /\nSitemap: %ssitemap.xml\n' % BASE)
+    urls = ['', 'videos.html', 'about.html'] + ['c/%s.html' % s['slug'] for s in summary]
+    open(os.path.join(out, 'sitemap.xml'), 'w').write('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n%s</urlset>\n' % ''.join(
+        '<url><loc>%s%s</loc><lastmod>%s</lastmod></url>\n' % (BASE, u, time.strftime('%Y-%m-%d', time.gmtime())) for u in urls))
     json.dump({'built': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()), 'total': total, 'collections': summary}, open(os.path.join(out, 'data', 'summary.json'), 'w'), indent=1)
     print('built', out, dict(total))
 
@@ -318,9 +323,13 @@ ABOUT = '''<h1>About</h1>
 <ul><li>A page can return 200 and still have lost its content; we only catch “not found” pages that say so in their title.</li>
 <li>“Moved” is counted as online even when the new page says less.</li>
 <li>The live web changes; each check has a date in the data files (<code>data/*.json</code>).</li></ul>
-<p class="muted small">Built %(built)s. Code: <a href="https://github.com/internetarchivecanada/gone-gov">internetarchivecanada/gone-gov</a>.</p>
+<h2 id="accessibility">Accessibility</h2>
+<p>The site is plain HTML with a skip link, labelled navigation and form fields, text alternatives for the charts (each has a table view), and enough colour contrast in light and dark mode. Statuses are always written out, never shown by colour alone. The overview, the per-website tables and the videos page work without JavaScript; the searchable lists on the collection pages need it. It is meant to meet WCAG 2.2 AA (Web Content Accessibility Guidelines). If something does not work for you, please write to <a href="mailto:info@archive.org?subject=Gone%%20from%%20.gov">info@archive.org</a>.</p>
+<h2>Web archives</h2>
+<p>Web archives are welcome to capture this site. If your crawler has trouble capturing it, contact <a href="mailto:info@archive.org?subject=Gone%%20from%%20.gov">info@archive.org</a>.</p>
 <h2>Who made this</h2>
-<p>Made by Claude, an AI model made by Anthropic, working in Claude Code at the direction of Mark Graham (Internet Archive). Mark decided what it should cover; Claude did the research and wrote the code.</p>'''
+<p>This site was made by Claude, an AI model made by Anthropic, working in Claude Code at the direction of Mark Graham (Internet Archive). Mark Graham decided what it should be and what it should cover; Claude did the research and wrote the code.</p>
+<p class="muted small">Built %(built)s.</p>'''
 
 if __name__ == '__main__':
     build(sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(HERE), 'public'))
