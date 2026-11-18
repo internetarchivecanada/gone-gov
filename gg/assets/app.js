@@ -12,18 +12,18 @@
     app.innerHTML='<form class="controls" onsubmit="return false" aria-label="Filter the list">'+
       '<label class="q"><span class="vh">Search</span><input type="search" id="q" placeholder="Search titles and addresses"></label>'+
       '<label><span class="vh">Status</span><select id="st"><option value="">Gone or redirected</option><option value="0">Gone</option><option value="1">Redirected away</option></select></label>'+
-      '<label><span class="vh">Type</span><select id="ki"><option value="">Pages and documents</option><option value="0">Web pages</option><option value="1">Documents</option></select></label>'+
+      (app.dataset.kind?'':'<label><span class="vh">Type</span><select id="ki"><option value="">Pages and documents</option><option value="0">Web pages</option><option value="1">Documents</option></select></label>')+
       '<label><span class="vh">Wayback Machine</span><select id="wb"><option value="">Any archive</option><option value="1">Has a Wayback copy</option><option value="0">No Wayback copy</option></select></label>'+
       '<label><span class="vh">Website</span><select id="ho"><option value="">All websites</option>'+hs.map(function(h){return '<option value="'+h[1]+'">'+esc(h[0])+'</option>'}).join('')+'</select></label>'+
       '<label><span class="vh">Sort</span><select id="so"><option value="a">Address</option><option value="r">Most recently removed</option><option value="t">Title</option></select></label>'+
       '</form><p class="count" id="cnt" aria-live="polite"></p><ol class="rows" id="list"></ol><p><button class="more" id="more" type="button">Show more</button></p>';
     list=document.getElementById('list');cnt=document.getElementById('cnt');more=document.getElementById('more');
-    var p=qs();['q','st','ki','wb','ho','so'].forEach(function(k){var el=document.getElementById(k);if(p.get(k))el.value=p.get(k);el.addEventListener(k==='q'?'input':'change',apply)});
+    var p=qs();['q','st','ki','wb','ho','so'].forEach(function(k){var el=document.getElementById(k);if(!el)return;if(p.get(k))el.value=p.get(k);el.addEventListener(k==='q'?'input':'change',apply)});
     more.addEventListener('click',function(){render(100)});
     apply();
   }
   function apply(){
-    var q=document.getElementById('q').value.toLowerCase().trim(),st=document.getElementById('st').value,ki=document.getElementById('ki').value,
+    var q=document.getElementById('q').value.toLowerCase().trim(),st=document.getElementById('st').value,ki=document.getElementById('ki')?document.getElementById('ki').value:'',
         wb=document.getElementById('wb').value,ho=document.getElementById('ho').value,so=document.getElementById('so').value;
     var h=new URLSearchParams();[['q',q],['st',st],['ki',ki],['wb',wb],['ho',ho],['so',so==='a'?'':so]].forEach(function(x){if(x[1])h.set(x[0],x[1])});
     history.replaceState(null,'',h.toString()?'#'+h.toString():location.pathname);

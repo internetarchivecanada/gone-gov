@@ -5,12 +5,12 @@ Reads lists/, live/, wayback/, videos/ and meta/ under GG_DATA. Safe to run whil
 """
 import html, json, os, re, shutil, sys, time, urllib.parse
 from collections import Counter, defaultdict
-from gg.common import COLLECTIONS, DATA, jsonl, norm, host_of
+from gg.common import COLLECTIONS, DATA, jsonl, norm, host_of, ext_of
 from gg.classify import catchalls, status
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BASE = 'https://wayback-labs.sf.archive.org/gone-gov/'
-V = '10'
+V = '11'
 STATUS_LABEL = {'gone': 'Gone', 'away': 'Redirected away', 'moved': 'Moved', 'live': 'Still online',
                 'blocked': "Can't be checked", 'unclear': 'Unclear', 'pending': 'Not yet checked'}
 
@@ -44,7 +44,7 @@ def code_of(r, cls):
 
 def page(title, body, rel='', active='', desc=''):
     nav = ''.join('<a href="%s%s"%s>%s</a>' % (rel, h, ' aria-current="page"' if a == active else '', t)
-                  for h, t, a in [('index.html', 'Overview', 'home'), ('videos.html', 'Videos', 'videos'), ('about.html', 'About', 'about')])
+                  for h, t, a in [('index.html', 'Overview', 'home'), ('pdfs.html', 'PDFs', 'pdfs'), ('videos.html', 'Videos', 'videos'), ('about.html', 'About', 'about')])
     return '''<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -138,18 +138,22 @@ def build(out):
     sections = []
     videos_all = []
     total = Counter()
+    pdf_hosts = []; pdf_hidx = {}; pdf_rows = []; pdf_summary = []; pdf_total = Counter()
     for slug, short, sub in COLLECTIONS:
         rows, live, wb, vids, nv, meta = load(slug)
         if not rows:
             continue
         catch = catchalls(live.values())
-        c = Counter(); ck = Counter(); hosts = []; hidx = {}; out_rows = []
+        c = Counter(); ck = Counter(); hosts = []; hidx = {}; out_rows = []; pc = Counter()
         hstat = defaultdict(Counter); sec = defaultdict(Counter); months = Counter(); finals = Counter()
         for r in rows:
             lv = live.get(r['u'])
             cls = status(lv, catch) if lv else 'pending'
             c[cls] += 1
             ck[(r['k'], cls)] += 1
+            is_pdf = ext_of(r['u']) == 'pdf'
+            if is_pdf:
+                pc[cls] += 1
             h = urllib.parse.urlsplit(r['u']).netloc.lower()
             hstat[h][cls] += 1
             hstat[h]['dns'] += 1 if lv and lv.get('st') == 'dns' else 0
@@ -158,8 +162,12 @@ def build(out):
             w = wb.get(r['u'], {})
             if w.get('lt'):
                 c['wb'] += 1
+                if is_pdf:
+                    pc['wb'] += 1
             elif r['u'] in wb and not w.get('err'):
                 c['nowb'] += 1
+                if is_pdf:
+                    pc['nowb'] += 1
             mo = month_of(w)
             if mo:
                 months[mo] += 1
@@ -174,6 +182,10 @@ def build(out):
             out_rows.append([hidx[h], path, r.get('t') or '', 1 if r['k'] == 'doc' else 0, 0 if cls == 'gone' else 1,
                              code_of(lv, cls), lv.get('f', '') if cls == 'away' else '', w.get('lt', ''), w.get('ft', ''), w.get('fs', ''),
                              (w.get('lo') or '') if w.get('lo') and norm(w['lo']) != norm(r['u']) else '', (r.get('ts') or '')[:8], 1 if r['u'] in wb else 0])
+            if is_pdf:
+                if h not in pdf_hidx:
+                    pdf_hidx[h] = len(pdf_hosts); pdf_hosts.append(h)
+                pdf_rows.append([pdf_hidx[h]] + out_rows[-1][1:])
         checked = sum(v for k, v in c.items() if k in STATUS_LABEL and k != 'pending')
         vgone = [v for v in vids.values() if v.get('yt') != 200]
         for v in vgone:
@@ -183,6 +195,9 @@ def build(out):
              'dates': (meta.get('dateEarliest') or '')[:10] + ' – ' + (meta.get('dateLatest') or '')[:10],
              'pagecount': meta.get('pageCount')}
         summary.append(s)
+        if sum(pc[k] for k in STATUS_LABEL):
+            pdf_summary.append({'slug': slug, 'short': short, 'total': sum(pc[k] for k in STATUS_LABEL), 'c': dict(pc)})
+            pdf_total.update(pc)
         for k in ('gone', 'away', 'moved', 'live', 'blocked', 'unclear', 'pending', 'wb', 'nowb'):
             total[k] += c.get(k, 0)
         total['all'] += len(rows); total['videos'] += nv; total['vchecked'] += len(vids); total['vgone'] += len(vgone)
@@ -267,6 +282,24 @@ def build(out):
         n(total['all']), n(lost), (' (of %s checked so far)' % n(checked)) if total['pending'] else '', progress,
         n(total['gone']), n(total['away']), wb_big, wb_text, n(total['vgone']), cards, n(sum(allmonths.values())), chart(allmonths, 'when'), ''.join(hl))
     open(os.path.join(out, 'index.html'), 'w').write(page('Gone from .gov', body, '', 'home', 'Pages from ten US government websites archived in 2024–25 that are gone from the live web today, with links to Wayback Machine copies.'))
+    # PDFs page
+    json.dump({'slug': 'pdfs', 'short': 'PDFs', 'hosts': pdf_hosts, 'rows': pdf_rows}, open(os.path.join(out, 'data', 'pdfs.json'), 'w'), separators=(',', ':'))
+    pt = sum(pdf_total[k] for k in STATUS_LABEL)
+    plost = pdf_total['gone'] + pdf_total['away']
+    plooked = pdf_total['wb'] + pdf_total['nowb']
+    pwb = ''
+    if plooked:
+        pwb = ' Of the %s looked up in the Wayback Machine so far, <b>%.1f%% have a working copy</b>%s.' % (
+            n(plooked), 100.0 * pdf_total['wb'] / plooked, (' (%s still to look up)' % n(plost - plooked)) if plost > plooked else '')
+    pcards = ''.join('<div class="card"><h3>%s</h3>%s</div>' % (esc(p['short']) + ' <span class="muted small">%s PDFs</span>' % n(p['total']), bars_html(p, small=True)) for p in pdf_summary)
+    pbody = '''<h1>PDFs that are gone</h1>
+<p class="lede">%s of the %s archived addresses are PDFs: reports, fact sheets, guidance, data tables. <b>%s are gone</b> from the live web and <b>%s now redirect somewhere unrelated</b>.%s</p>
+%s
+<div class="cards">%s</div>
+<h2 id="gone">Gone or redirected away</h2>
+<div id="app" data-slug="pdfs" data-kind="pdf" data-rel=""><p>Loading the list…</p></div>
+<script src="app.js?v=%s"></script>''' % (n(pt), n(total['all']), n(pdf_total['gone']), n(pdf_total['away']), pwb, progress, pcards, V)
+    open(os.path.join(out, 'pdfs.html'), 'w').write(page('PDFs – Gone from .gov', pbody, '', 'pdfs', 'PDF documents from ten US government websites that are gone from the live web, with Wayback Machine copies.'))
     # videos page
     vrows = []
     for slug, short, sub in COLLECTIONS:
@@ -284,7 +317,7 @@ def build(out):
     open(os.path.join(out, 'about.html'), 'w').write(page('About – Gone from .gov', ABOUT % {'built': time.strftime('%-d %B %Y %H:%M UTC', time.gmtime())}, '', 'about', 'How Gone from .gov was made.'))
     open(os.path.join(out, '404.html'), 'w').write(page('Not found – Gone from .gov', '<h1>Not here either</h1><p>This address isn\'t part of the site. <a href="index.html">Back to the overview</a>.</p>', '/gone-gov/'))
     open(os.path.join(out, 'robots.txt'), 'w').write('User-agent: *\nAllow: /\nSitemap: %ssitemap.xml\n' % BASE)
-    urls = ['', 'videos.html', 'about.html'] + ['c/%s.html' % s['slug'] for s in summary]
+    urls = ['', 'pdfs.html', 'videos.html', 'about.html'] + ['c/%s.html' % s['slug'] for s in summary]
     open(os.path.join(out, 'sitemap.xml'), 'w').write('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n%s</urlset>\n' % ''.join(
         '<url><loc>%s%s</loc><lastmod>%s</lastmod></url>\n' % (BASE, u, time.strftime('%Y-%m-%d', time.gmtime())) for u in urls))
     json.dump({'built': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()), 'total': total, 'collections': summary}, open(os.path.join(out, 'data', 'summary.json'), 'w'), indent=1)
