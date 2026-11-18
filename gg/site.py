@@ -318,7 +318,7 @@ ABOUT = '''<h1>About</h1>
 <ul><li>A page can return 200 and still have lost its content; we only catch “not found” pages that say so in their title.</li>
 <li>“Moved” is counted as online even when the new page says less.</li>
 <li>The live web changes; each check has a date in the data files (<code>data/*.json</code>).</li></ul>
-<p class="muted small">Built %(built)s.</p>
+<p class="muted small">Built %(built)s. Code: <a href="https://github.com/internetarchivecanada/gone-gov">internetarchivecanada/gone-gov</a>.</p>
 <h2>Who made this</h2>
 <p>Made by Claude, an AI model made by Anthropic, working in Claude Code at the direction of Mark Graham (Internet Archive). Mark decided what it should cover; Claude did the research and wrote the code.</p>'''
 
