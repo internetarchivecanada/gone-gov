@@ -10,7 +10,7 @@ from gg.classify import catchalls, status
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BASE = 'https://wayback-labs.sf.archive.org/gone-gov/'
-V = '9'
+V = '10'
 STATUS_LABEL = {'gone': 'Gone', 'away': 'Redirected away', 'moved': 'Moved', 'live': 'Still online',
                 'blocked': "Can't be checked", 'unclear': 'Unclear', 'pending': 'Not yet checked'}
 
@@ -299,6 +299,8 @@ def bars_html(s, small=False):
     parts = [(k, lab, c.get(k, 0)) for k, lab in SEG if c.get(k, 0)]
     def share(v):
         p = 100.0 * v / t
+        if p < 0.1:
+            return '<0.1%'
         return '%.1f%%' % p if p < 10 else '%d%%' % round(p)
     segs = ''.join('<span class="%s" style="flex-grow:%d" data-tip="%s: %s (%s)"></span>' % (k, v, esc(lab), n(v), share(v)) for k, lab, v in parts)
     key = ''.join('<li><span class="k %s"></span>%s <b>%s</b> <span class="muted">%s</span></li>' % (k, esc(lab), n(v), share(v)) for k, lab, v in parts)
