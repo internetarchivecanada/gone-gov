@@ -3,7 +3,7 @@
 python3 -m gg.videos [slug ...]  -> data/videos/<slug>.checked.jsonl (resumable)
 - live: YouTube's public oEmbed endpoint (200 = playable and embeddable; 401 = private or embedding off; 404 = gone),
   then the watch page's own reason text for anything not 200 ("This video is private", "removed by the uploader"...).
-- title: from oEmbed when live; otherwise from the archived embed page inside the Webrecorder WACZ (range read).
+- title: from oEmbed when live; otherwise from the archived embed page inside the collection's WACZ (range read).
 - Wayback: latest status-200 capture of youtube.com/watch?v=<id>.
 """
 import html, json, os, re, sys, time, urllib.error, urllib.parse, zlib

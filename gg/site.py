@@ -10,9 +10,7 @@ from gg.classify import catchalls, status
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BASE = 'https://wayback-labs.sf.archive.org/gone-gov/'
-V = '5'
-MIRROR_KEYS = ['cdc.gov', 'epa.gov', 'usaid.gov', 'sealevel.globalchange.gov', 'globalchange.gov', 'climate.gov',
-               'fema.gov', 'ed.gov', 'imls.gov', 'covid.gov', 'coralreef.gov']
+V = '7'
 STATUS_LABEL = {'gone': 'Gone', 'away': 'Redirected away', 'moved': 'Moved', 'live': 'Still online',
                 'blocked': "Can't be checked", 'unclear': 'Unclear', 'pending': 'Not yet checked'}
 
@@ -24,16 +22,6 @@ def n(x):
 
 def pct(a, b):
     return '%d%%' % round(100.0 * a / b) if b else '–'
-
-def mirror(u):
-    p = urllib.parse.urlsplit(u)
-    h = host_of(u)
-    if not h.endswith('.gov'):
-        return ''
-    if not any(h == k or h.endswith('.' + k) for k in MIRROR_KEYS):
-        return ''
-    sub = h[:-4].replace('.', '-')
-    return 'https://%s.govarchive.us%s%s' % (sub, p.path or '/', '?' + p.query if p.query else '')
 
 def day(ts):
     if not ts or len(ts) < 8:
@@ -74,7 +62,7 @@ def page(title, body, rel='', active='', desc=''):
 <footer class="wrap"><a class="ia" href="https://archive.org/"><img src="%sinternet-archive.png" alt="Internet Archive" width="40" height="40"></a>
 <div><p>A <a href="https://wayback-labs.sf.archive.org/">Wayback Machine Labs</a> experiment, <a href="https://archive.org/">Internet Archive</a>.
 Feedback? <a href="mailto:info@archive.org?subject=Gone%%20from%%20.gov">Email us</a>.</p>
-<p>Lists of archived addresses: the <a href="https://govarchive.us/">Webrecorder US Government Web Archive</a>. Earlier copies: the <a href="https://web.archive.org/">Wayback Machine</a>.
+<p>Archived copies: the <a href="https://web.archive.org/">Wayback Machine</a>.
 Made by Claude (Anthropic) at the direction of Mark Graham. <a href="%sabout.html">About this site</a> · <a href="%sabout.html#accessibility">Accessibility</a></p></div></footer>
 </body></html>''' % (esc(title), esc(desc), rel, rel, V, rel, rel, nav, body, rel, rel, rel)
 
@@ -218,7 +206,7 @@ def build(out):
             nosec = '<p class="note"><b>%s addresses can\'t be checked.</b> Their site refuses automated requests (a Cloudflare or AWS challenge page, or Akamai\'s “Access Denied”). We don\'t try to get around that, so these addresses are left out of the list below rather than guessed at. Some refusals may lift; they are asked again on later passes.</p>' % n(c['blocked'])
         body = '''<p class="crumb"><a href="../index.html">Overview</a> › %s</p>
 <h1>%s</h1>
-<p class="lede">%s addresses (%s documents) from Webrecorder's <a href="https://app.browsertrix.com/explore/usgov-archive/collections/%s">%s collection</a>, captured %s. Checked on the live web: %s so far.</p>
+<p class="lede">%s archived addresses (%s documents) from %s, captured %s. Checked on the live web: %s so far.</p>
 %s
 %s
 <h2 id="gone">Gone or redirected away</h2>
@@ -226,7 +214,7 @@ def build(out):
 <h2>By website</h2>
 <div class="scroll"><table class="tab"><thead><tr><th>Host</th><th class="num">Addresses</th><th class="num">Gone</th><th class="num">Redirected away</th><th class="num">Moved</th><th class="num">Online</th><th class="num">Other</th></tr></thead><tbody>%s</tbody></table></div>
 <script src="../app.js?v=%s"></script>''' % (
-            esc(short), esc(short), n(len(rows)), n(s['docs']), esc(slug), esc(meta.get('name') or short), esc(s['dates']), pct(checked, len(rows)),
+            esc(short), esc(short), n(len(rows)), n(s['docs']), esc(short), esc(s['dates']), pct(checked, len(rows)),
             bars_html(s), nosec, esc(slug), hrows, V)
         open(os.path.join(out, 'c', slug + '.html'), 'w').write(page(short + ' – Gone from .gov', body, '../', '', 'Pages and documents from the %s archive that the live web no longer serves.' % short))
     # front page
@@ -253,7 +241,7 @@ def build(out):
         progress = '<p class="note">Checks are still running: %s of %s addresses and %s of %s videos checked so far. This page rebuilds every 30 minutes.</p>' % (
             n(checked), n(total['all']), n(total['vchecked']), n(total['videos']))
     body = '''<section class="hero"><h1>Pages the US government took down, still in the archive</h1>
-<p class="lede">In the weeks around the January 2025 change of administration, Webrecorder archived %s pages and documents from ten federal websites (<a href="https://govarchive.us/">govarchive.us</a>). We checked each address on today's live web. <b>%s are gone or now redirect somewhere unrelated</b>%s.</p></section>
+<p class="lede">In the weeks around the January 2025 change of administration, %s pages and documents from ten US government websites were archived. We checked each address on today's live web. <b>%s are gone or now redirect somewhere unrelated</b>%s.</p></section>
 %s
 <div class="stats">
 <div><b>%s</b><span>gone (404, deleted site, “not found” page)</span></div>
@@ -271,7 +259,7 @@ def build(out):
 %s''' % (
         n(total['all']), n(lost), (' (of %s checked so far)' % n(checked)) if total['pending'] else '', progress,
         n(total['gone']), n(total['away']), n(total['wb']), n(total['vgone']), cards, n(sum(allmonths.values())), chart(allmonths, 'when'), ''.join(hl))
-    open(os.path.join(out, 'index.html'), 'w').write(page('Gone from .gov', body, '', 'home', 'US government web pages archived by Webrecorder in 2024–25 that are gone from the live web today, with links to Wayback Machine copies.'))
+    open(os.path.join(out, 'index.html'), 'w').write(page('Gone from .gov', body, '', 'home', 'Pages from ten US government websites archived in 2024–25 that are gone from the live web today, with links to Wayback Machine copies.'))
     # videos page
     vrows = []
     for slug, short, sub in COLLECTIONS:
@@ -306,7 +294,7 @@ def bars_html(s, small=False):
 ABOUT = '''<h1>About</h1>
 <p class="lede">Gone from .gov shows which pages and documents from ten archived US government websites are no longer on the live web, and where a working copy can still be found.</p>
 <h2>Where the list comes from</h2>
-<p><a href="https://govarchive.us/">govarchive.us</a> is Webrecorder's selection from its US Government Web Archive, made for the <a href="https://eotarchive.org/">End of Term Web Archive</a> between November 2024 and April 2025: EPA, CDC, the Department of Education, FEMA, USAID, the Global Change Research Program, Climate.gov, IMLS, Sea Level Change and COVID.gov. We read each collection's list of pages and its capture index straight out of its published WACZ files (only the small index parts, using range requests). Images, scripts, style sheets and data feeds are left out; web pages and documents (PDF, Word, Excel, PowerPoint, CSV) are kept. Addresses are counted once, ignoring http/https, “www.” and a trailing slash.</p>
+<p>The addresses come from archives of ten US government websites made between November 2024 and April 2025: EPA, CDC, the Department of Education, FEMA, USAID, the Global Change Research Program, Climate.gov, IMLS, Sea Level Change and COVID.gov. We read each archive's list of pages and its capture index straight out of its published WACZ files (only the small index parts, using range requests). Images, scripts, style sheets and data feeds are left out; web pages and documents (PDF, Word, Excel, PowerPoint, CSV) are kept. Addresses are counted once, ignoring http/https, “www.” and a trailing slash.</p>
 <h2>How each address is checked</h2>
 <ul>
 <li><b>Gone</b>: the live site answers 404 or 410, serves a “page not found” page, or the site's name no longer resolves at all.</li>

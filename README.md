@@ -1,14 +1,13 @@
 # Gone from .gov
 
-Which pages and documents from Webrecorder's US Government Web Archive selection (https://govarchive.us/, ten
-collections captured November 2024 – April 2025) are no longer on the live web, and where a working copy can still
+Which pages and documents from archives of ten US government websites (captured November 2024 – April 2025) are no longer on the live web, and where a working copy can still
 be found in the Wayback Machine. Also: embedded YouTube videos that no longer play.
 
 Live: https://wayback-labs.sf.archive.org/gone-gov/ (Wayback Machine Labs studio, static service `gone-gov`).
 
 ## Sources
 
-- **Webrecorder US Government Web Archive** (https://app.browsertrix.com/explore/usgov-archive): each collection's
+- **Archives of ten US government websites**: each one's
   page list (`pages/*.jsonl`) and capture index (`indexes/*.cdx.gz`), read straight out of its published WACZ files
   with HTTP range requests, without downloading the archives. Web pages and documents (PDF, Word, Excel,
   PowerPoint, CSV) are kept; images, scripts, style sheets and data feeds are left out.
@@ -49,7 +48,6 @@ that answered before is treated as rate limiting (15-minute pauses). Challenges 
 - **moved**: redirects to a specific other page (counted, not listed)
 - **live**, **blocked** (refuses automated requests), **unclear** (other errors)
 
-govarchive.us copies: `a.b.gov/x` is mirrored at `a-b.govarchive.us/x`.
 
 ## Deploy
 

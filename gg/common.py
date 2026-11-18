@@ -5,7 +5,7 @@ DATA = os.environ.get('GG_DATA', os.path.join(os.path.dirname(os.path.dirname(os
 API = 'https://app.browsertrix.com/api/public/orgs/usgov-archive/collections/'
 UA = 'Mozilla/5.0 (compatible; WaybackLabs-GoneGov/1.0; +https://wayback-labs.sf.archive.org/gone-gov/about.html)'
 
-# slug on Browsertrix, short name, govarchive.us mirror subdomain
+# collection slug in the public API, short name, short id
 COLLECTIONS = [
     ('epa', 'EPA', 'epa'),
     ('cdc', 'CDC', 'cdc'),
