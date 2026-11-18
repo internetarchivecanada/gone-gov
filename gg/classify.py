@@ -49,3 +49,27 @@ def status(r, catch):
         if redirected and st in (401, 403) and is_home(f):
             return 'away'
     return 'unclear'
+
+
+# ---- crawler loops: addresses that never existed on the site ----
+REPEAT3 = re.compile(r'(/[^/]+)\1{2,}(/|$)')
+REPEAT2 = re.compile(r'(/[^/]+)\1(/|$)')
+
+
+def basename(u):
+    return urllib.parse.urlsplit(u).path.rstrip('/').rsplit('/', 1)[-1].lower()
+
+
+def trap_finder(urls):
+    """Return a test for crawler-loop addresses (relative links resolved against the wrong base, again and again):
+    a path segment repeated 3+ times in a row, another address glued into the path ('://'), or a segment repeated
+    twice where the same file name turns up at 20+ addresses in the collection."""
+    common = Counter(basename(u) for u in urls if REPEAT2.search(urllib.parse.urlsplit(u).path))
+    many = {b for b, k in common.items() if k >= 20 and '.' in b}
+
+    def is_trap(u):
+        path = urllib.parse.urlsplit(u).path
+        if REPEAT3.search(path) or '://' in path:
+            return True
+        return bool(REPEAT2.search(path)) and basename(u) in many
+    return is_trap

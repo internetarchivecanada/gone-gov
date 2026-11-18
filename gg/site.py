@@ -6,11 +6,11 @@ Reads lists/, live/, wayback/, videos/ and meta/ under GG_DATA. Safe to run whil
 import html, json, os, re, shutil, sys, time, urllib.parse
 from collections import Counter, defaultdict
 from gg.common import COLLECTIONS, DATA, jsonl, norm, host_of, ext_of
-from gg.classify import catchalls, status
+from gg.classify import catchalls, status, trap_finder
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BASE = 'https://wayback-labs.sf.archive.org/gone-gov/'
-V = '11'
+V = '12'
 STATUS_LABEL = {'gone': 'Gone', 'away': 'Redirected away', 'moved': 'Moved', 'live': 'Still online',
                 'blocked': "Can't be checked", 'unclear': 'Unclear', 'pending': 'Not yet checked'}
 
@@ -143,6 +143,10 @@ def build(out):
         rows, live, wb, vids, nv, meta = load(slug)
         if not rows:
             continue
+        is_trap = trap_finder([r['u'] for r in rows])
+        ntrap = sum(1 for r in rows if is_trap(r['u']))
+        rows = [r for r in rows if not is_trap(r['u'])]
+        total['traps'] += ntrap
         catch = catchalls(live.values())
         c = Counter(); ck = Counter(); hosts = []; hidx = {}; out_rows = []; pc = Counter()
         hstat = defaultdict(Counter); sec = defaultdict(Counter); months = Counter(); finals = Counter()
@@ -314,7 +318,7 @@ def build(out):
 <p class="lede">The archived pages embedded %s distinct YouTube videos. We asked YouTube about each one: <b>%s of the %s checked no longer play</b> — made private, removed, or their channel closed. The Wayback Machine link is its latest capture of the video's YouTube page (the page, which may not include the video itself).</p>
 %s%s''' % (n(total['videos']), n(total['vgone']), n(total['vchecked']), progress, ''.join(vrows) or '<p>No results yet.</p>')
     open(os.path.join(out, 'videos.html'), 'w').write(page('Videos – Gone from .gov', vbody, '', 'videos', 'YouTube videos embedded on archived US government pages that no longer play.'))
-    open(os.path.join(out, 'about.html'), 'w').write(page('About – Gone from .gov', ABOUT % {'built': time.strftime('%-d %B %Y %H:%M UTC', time.gmtime())}, '', 'about', 'How Gone from .gov was made.'))
+    open(os.path.join(out, 'about.html'), 'w').write(page('About – Gone from .gov', ABOUT % {'built': time.strftime('%-d %B %Y %H:%M UTC', time.gmtime()), 'traps': n(total['traps'])}, '', 'about', 'How Gone from .gov was made.'))
     open(os.path.join(out, '404.html'), 'w').write(page('Not found – Gone from .gov', '<h1>Not here either</h1><p>This address isn\'t part of the site. <a href="index.html">Back to the overview</a>.</p>', '/gone-gov/'))
     open(os.path.join(out, 'robots.txt'), 'w').write('User-agent: *\nAllow: /\nSitemap: %ssitemap.xml\n' % BASE)
     urls = ['', 'pdfs.html', 'videos.html', 'about.html'] + ['c/%s.html' % s['slug'] for s in summary]
@@ -362,7 +366,8 @@ ABOUT = '''<h1>About</h1>
 <h2>Limits</h2>
 <ul><li>A page can return 200 and still have lost its content; we only catch “not found” pages that say so in their title.</li>
 <li>“Moved” is counted as online even when the new page says less.</li>
-<li>The live web changes; each check has a date in the data files (<code>data/*.json</code>).</li></ul>
+<li>The live web changes; each check has a date in the data files (<code>data/*.json</code>).</li>
+<li>Crawler loops are left out: %(traps)s addresses that never existed on the sites, made when the archiving crawler followed relative links against the wrong base again and again (for example <code>…/downloads/downloads/downloads/report.pdf</code>).</li></ul>
 <h2 id="accessibility">Accessibility</h2>
 <p>The site is plain HTML with a skip link, labelled navigation and form fields, text alternatives for the charts (each has a table view), and enough colour contrast in light and dark mode. Statuses are always written out, never shown by colour alone. The overview, the per-website tables and the videos page work without JavaScript; the searchable lists on the collection pages need it. It is meant to meet WCAG 2.2 AA (Web Content Accessibility Guidelines). If something does not work for you, please write to <a href="mailto:info@archive.org?subject=Gone%%20from%%20.gov">info@archive.org</a>.</p>
 <h2>Web archives</h2>
