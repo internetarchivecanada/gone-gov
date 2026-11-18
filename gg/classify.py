@@ -1,0 +1,51 @@
+"""Turn a live-check row into one status.
+
+live     answers 200 at the same address (or a trivial redirect: http->https, www, trailing slash)
+moved    redirects to a specific other page (one-to-one); probably still online elsewhere
+away     redirects to a homepage, or to a page that many old addresses now land on (catch-all)
+gone     404/410, a "page not found" page served with 200, or the host no longer exists / refuses connections
+blocked  the site answers automated requests with a Cloudflare challenge; can't be checked
+unclear  other errors: 401/403, 429, 5xx, timeouts, TLS failures
+"""
+import re, urllib.parse
+from collections import Counter
+from gg.common import norm, host_of
+
+SOFT404 = re.compile(r'\b(page not found|not found|404|no longer available|page (?:does not|doesn.t) exist|cannot be found|could not be found|error page)\b', re.I)
+GONE_CODES = {404, 410}
+
+def base_domain(h):
+    parts = h.split('.')
+    return '.'.join(parts[-2:])
+
+def is_home(u):
+    p = urllib.parse.urlsplit(u)
+    return p.path.rstrip('/') in ('', '/index.html', '/index.htm', '/home', '/en', '/es') and not p.query
+
+def catchalls(lives, min_sources=25):
+    """Final addresses that at least min_sources distinct old addresses redirect to."""
+    c = Counter(norm(r['f']) for r in lives if r.get('f') and norm(r['f']) != norm(r['u']))
+    return {k for k, n in c.items() if n >= min_sources}
+
+def status(r, catch):
+    st = r.get('st')
+    if st == 'blocked' or r.get('cf'):
+        return 'blocked'
+    if st in ('dns', 'refused'):
+        return 'gone'
+    if isinstance(st, int):
+        f = r.get('f')
+        redirected = f and norm(f) != norm(r['u'])
+        if st in GONE_CODES:
+            return 'gone'
+        if 200 <= st < 300:
+            if redirected:
+                if norm(f) in catch or (is_home(f) and not is_home(r['u'])):
+                    return 'away'
+                return 'moved'
+            if r.get('t') and SOFT404.search(r['t']) and not SOFT404.search(r.get('t0', '') or ''):
+                return 'gone'
+            return 'live'
+        if redirected and st in (401, 403) and is_home(f):
+            return 'away'
+    return 'unclear'
