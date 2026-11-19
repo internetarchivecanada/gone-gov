@@ -76,3 +76,12 @@ ul.key{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:
 ul.key.small{font-size:13px;display:block}ul.key.small li{line-height:1.6}
 ul.key li{white-space:nowrap}ul.key .k{margin:0 5px 0 0}
 .card .sbar{margin-top:10px}
+
+/* icons */
+.sprite{position:absolute;width:0;height:0;overflow:hidden}
+.ic{width:1.15em;height:1.15em;vertical-align:-.22em;flex:none;color:currentColor}
+.ic.big{width:1.45em;height:1.45em;vertical-align:-.35em;margin-right:6px}
+header nav a .ic{margin-right:6px}
+h1.ich{display:flex;align-items:center;gap:12px}h1.ich .ic{width:1.1em;height:1.1em}
+.stats a{color:inherit}.stats a .ic{margin-right:5px}
+td.vt{display:flex;gap:10px;align-items:flex-start}td.vt .ic{width:28px;height:28px;margin-top:2px;color:var(--muted)}

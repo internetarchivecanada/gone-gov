@@ -10,7 +10,8 @@ from gg.classify import catchalls, status, trap_finder
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BASE = 'https://wayback-labs.sf.archive.org/gone-gov/'
-V = '12'
+V = '13'
+ICON = '<svg class="ic" aria-hidden="true"><use href="#i-%s"/></svg>'
 STATUS_LABEL = {'gone': 'Gone', 'away': 'Redirected away', 'moved': 'Moved', 'live': 'Still online',
                 'blocked': "Can't be checked", 'unclear': 'Unclear', 'pending': 'Not yet checked'}
 
@@ -44,7 +45,7 @@ def code_of(r, cls):
 
 def page(title, body, rel='', active='', desc=''):
     nav = ''.join('<a href="%s%s"%s>%s</a>' % (rel, h, ' aria-current="page"' if a == active else '', t)
-                  for h, t, a in [('index.html', 'Overview', 'home'), ('pdfs.html', 'PDFs', 'pdfs'), ('videos.html', 'Videos', 'videos'), ('about.html', 'About', 'about')])
+                  for h, t, a in [('index.html', 'Overview', 'home'), ('pdfs.html', ICON % 'pdf' + 'PDFs', 'pdfs'), ('videos.html', ICON % 'video' + 'Videos', 'videos'), ('about.html', 'About', 'about')])
     return '''<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -53,6 +54,7 @@ def page(title, body, rel='', active='', desc=''):
 <link rel="icon" href="%sfavicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="%sstyle.css?v=%s">
 </head><body>
+<svg class="sprite" aria-hidden="true" focusable="false"><symbol id="i-pdf" viewBox="0 0 24 24"><path d="M6 1.8h8.2l5.3 5.3V20a2.2 2.2 0 0 1-2.2 2.2H6A2.2 2.2 0 0 1 3.8 20V4A2.2 2.2 0 0 1 6 1.8z" fill="var(--paper)" stroke="currentColor" stroke-width="1.5"/><path d="M14 1.9v5.4h5.4" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="1.5" y="11" width="16" height="7.4" rx="1.6" fill="#c0392b"/><text x="9.5" y="16.8" text-anchor="middle" font-size="5.8" font-weight="800" font-family="Helvetica,Arial,sans-serif" fill="#fff">PDF</text></symbol><symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 1.8h8.2l5.3 5.3V20a2.2 2.2 0 0 1-2.2 2.2H6A2.2 2.2 0 0 1 3.8 20V4A2.2 2.2 0 0 1 6 1.8z" fill="var(--paper)" stroke="currentColor" stroke-width="1.5"/><path d="M14 1.9v5.4h5.4M7.5 12h9M7.5 15h9M7.5 18h6" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol><symbol id="i-video" viewBox="0 0 24 24"><rect x="1.8" y="4.3" width="20.4" height="15.4" rx="3.6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M9.6 8.6v6.8l6-3.4z" fill="currentColor"/></symbol><symbol id="i-video-off" viewBox="0 0 24 24"><rect x="1.8" y="4.3" width="20.4" height="15.4" rx="3.6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M9.6 8.6v6.8l6-3.4z" fill="currentColor"/><path d="M3.5 21.5 20.5 2.5" stroke="var(--paper)" stroke-width="4.2"/><path d="M3.5 21.5 20.5 2.5" stroke="#c0392b" stroke-width="2.2" stroke-linecap="round"/></symbol></svg>
 <a class="skip" href="#main">Skip to content</a>
 <header class="top"><div class="wrap">
 <a class="brand" href="%sindex.html"><svg viewBox="0 0 32 32" aria-hidden="true"><use href="%sfavicon.svg#g"/></svg><span>Gone from <em>.gov</em></span></a>
@@ -273,7 +275,7 @@ def build(out):
 <div><b>%s</b><span>gone (404, deleted site, “not found” page)</span></div>
 <div><b>%s</b><span>redirected away (to a homepage or a catch-all page)</span></div>
 <div><b>%s</b><span>%s</span></div>
-<div><b>%s</b><span>embedded YouTube videos no longer play</span></div>
+<div><b>%s</b><span><a href="videos.html"><svg class="ic" aria-hidden="true"><use href="#i-video-off"/></svg>embedded YouTube videos</a> no longer play</span></div>
 </div>
 <h2>Collections</h2>
 <div class="cards">%s</div>
@@ -296,7 +298,7 @@ def build(out):
         pwb = ' Of the %s looked up in the Wayback Machine so far, <b>%.1f%% have a working copy</b>%s.' % (
             n(plooked), 100.0 * pdf_total['wb'] / plooked, (' (%s still to look up)' % n(plost - plooked)) if plost > plooked else '')
     pcards = ''.join('<div class="card"><h3>%s</h3>%s</div>' % (esc(p['short']) + ' <span class="muted small">%s PDFs</span>' % n(p['total']), bars_html(p, small=True)) for p in pdf_summary)
-    pbody = '''<h1>PDFs that are gone</h1>
+    pbody = '''<h1 class="ich"><svg class="ic" aria-hidden="true"><use href="#i-pdf"/></svg>PDFs that are gone</h1>
 <p class="lede">%s of the %s archived addresses are PDFs: reports, fact sheets, guidance, data tables. <b>%s are gone</b> from the live web and <b>%s now redirect somewhere unrelated</b>.%s</p>
 %s
 <div class="cards">%s</div>
@@ -311,10 +313,10 @@ def build(out):
         if not vs:
             continue
         vrows.append('<h2 id="%s">%s <span class="muted">(%s)</span></h2><div class="scroll"><table class="tab vid"><thead><tr><th>Video</th><th>Channel</th><th>YouTube says</th><th>Wayback Machine</th></tr></thead><tbody>%s</tbody></table></div>' % (
-            slug, esc(short), n(len(vs)), ''.join('<tr><td>%s<br><span class="muted small">%s</span></td><td>%s</td><td>%s</td><td>%s</td></tr>' % (
+            slug, esc(short), n(len(vs)), ''.join('<tr><td class="vt">' + ICON % 'video-off' + '<span>%s<br><span class="muted small">%s</span></span></td><td>%s</td><td>%s</td><td>%s</td></tr>' % (
                 esc(v[2]) or '<span class="muted">(title not recorded)</span>', esc(v[1]), esc(v[3]), esc(v[4]),
                 ('<a href="https://web.archive.org/web/%s/https://www.youtube.com/watch?v=%s">%s</a>' % (v[5], v[1], day(v[5]))) if v[5] else '<span class="muted">no capture</span>') for v in sorted(vs, key=lambda v: v[2].lower() or 'zzz'))))
-    vbody = '''<h1>YouTube videos that no longer play</h1>
+    vbody = '''<h1 class="ich"><svg class="ic" aria-hidden="true"><use href="#i-video-off"/></svg>YouTube videos that no longer play</h1>
 <p class="lede">The archived pages embedded %s distinct YouTube videos. We asked YouTube about each one: <b>%s of the %s checked no longer play</b> — made private, removed, or their channel closed. The Wayback Machine link is its latest capture of the video's YouTube page (the page, which may not include the video itself).</p>
 %s%s''' % (n(total['videos']), n(total['vgone']), n(total['vchecked']), progress, ''.join(vrows) or '<p>No results yet.</p>')
     open(os.path.join(out, 'videos.html'), 'w').write(page('Videos – Gone from .gov', vbody, '', 'videos', 'YouTube videos embedded on archived US government pages that no longer play.'))

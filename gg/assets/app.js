@@ -2,6 +2,9 @@
   var app=document.getElementById('app'); if(!app) return;
   var slug=app.dataset.slug, rel=app.dataset.rel||'';
   var CODE={'404':'404 Not Found','410':'410 Gone','dns':'Website no longer exists','refused':'Server refuses connections','soft':'Shows a “not found” page'};
+  function docIcon(path){var e=(path.split('?')[0].split('.').pop()||'').toLowerCase();
+    return e==='pdf'?'<svg class="ic big" role="img" aria-label="PDF"><use href="#i-pdf"/></svg>':
+      '<svg class="ic big" aria-hidden="true"><use href="#i-doc"/></svg><span class="badge doc">'+esc(e.toUpperCase()||'Document')+'</span>'}
   function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
   function day(t){if(!t||t.length<8)return'';var d=new Date(Date.UTC(+t.slice(0,4),+t.slice(4,6)-1,+t.slice(6,8)));return d.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric',timeZone:'UTC'})}
   var D,rows=[],shown=0,list,cnt,more;
@@ -43,7 +46,7 @@
       var wbl=r[7]?'https://web.archive.org/web/'+r[7]+'/'+(r[10]||u):'';
       var stx=r[4]?'Redirects to <a href="'+esc(r[6])+'" rel="nofollow">'+esc(r[6].replace(/^https?:\/\//,'').slice(0,90))+'</a>':esc(CODE[r[5]]||('HTTP '+r[5]));
       var wtx=r[7]?'<span>Last working copy: <a href="'+esc(wbl)+'">'+day(r[7])+'</a>'+(r[8]?', missing by '+day(r[8]):'')+'</span>':(r[12]?'<span class="muted">No working copy in the Wayback Machine</span>':'<span class="muted">Wayback lookup pending</span>');
-      html+='<li><div class="t"><span class="badge '+(r[4]?'away">Redirected':'gone">Gone')+'</span>'+(r[3]?'<span class="badge doc">Document</span>':'')+
+      html+='<li><div class="t"><span class="badge '+(r[4]?'away">Redirected':'gone">Gone')+'</span>'+(r[3]?docIcon(r[1]):'')+
         (wbl?'<a href="'+esc(wbl)+'">'+esc(name)+'</a>':esc(name))+'</div>'+
         '<div class="u">'+esc(host+r[1])+'</div><div class="m"><span>'+stx+'</span>'+wtx+
         (r[11]?'<span class="muted">Archived '+day(r[11])+'</span>':'')+
