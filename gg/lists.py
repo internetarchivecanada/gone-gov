@@ -89,9 +89,13 @@ def merge(slug):
         ts = str(d.get('ts') or '')
         ts = re.sub(r'\D', '', ts)[:14]
         r = rows.get(k)
+        st = d.get('s')
+        st = int(st) if str(st).isdigit() else None
         if r is None:
-            rows[k] = {'u': u, 'k': kind, 'ts': ts, 't': d.get('t') or '', 'h': h}
+            rows[k] = {'u': u, 'k': kind, 'ts': ts, 't': d.get('t') or '', 'h': h, 'as': st}
         else:
+            if st and (r.get('as') is None or not (200 <= r['as'] < 400)) and (r.get('as') is None or 200 <= st < 400):
+                r['as'] = st          # the archive's best status for this address: any working capture wins
             if d.get('t') and not r['t']:
                 r['t'] = d['t']
             if ts and ts < r['ts']:

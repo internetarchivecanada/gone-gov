@@ -92,15 +92,20 @@ def check(u):
     return rec
 
 
-def dns_ok(host):
-    for h in (host, 'www.' + host):
-        try:
-            socket.getaddrinfo(h, 443)
-            return True
-        except socket.gaierror:
-            pass
-        except Exception:
-            return True
+def dns_ok(host, tries=3, wait=20):
+    """True if the host (or www.host) resolves. Tries three times, 20 s apart: right after a studio reboot the
+    resolver can fail for a few minutes, which once marked all of www.fema.gov as gone."""
+    for attempt in range(tries):
+        for h in (host, 'www.' + host):
+            try:
+                socket.getaddrinfo(h, 443)
+                return True
+            except socket.gaierror:
+                pass
+            except Exception:
+                return True
+        if attempt < tries - 1:
+            time.sleep(wait)
     return False
 
 
@@ -124,10 +129,19 @@ def run(slug, retry=False):
     for d in jsonl(path):
         last[d['u']] = d
     todo = []
+    resolves = {}
     for d in jsonl(os.path.join(DATA, 'lists', slug + '.jsonl')):
         prev = last.get(d['u'])
         if prev is None or recheck(prev):
             todo.append(d['u'])
+        elif prev.get('st') == 'dns':
+            # ask again if the host resolves now (a resolver failure must not stick)
+            h = urllib.parse.urlsplit(d['u']).netloc.lower().split(':')[0]
+            h = h[4:] if h.startswith('www.') else h
+            if h not in resolves:
+                resolves[h] = dns_ok(h, tries=1)
+            if resolves[h]:
+                todo.append(d['u'])
     byhost = defaultdict(list)
     for u in todo:
         byhost[urllib.parse.urlsplit(u).netloc.lower()].append(u)
