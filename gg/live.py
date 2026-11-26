@@ -222,8 +222,10 @@ def run(slug, retry=False):
                 if state['refused'] >= 15:
                     # 15 refusals in a row: ask for the homepage before deciding. If it answers, these were pages
                     # that are closed to everyone (e.g. comment-reply forms), not a refusal of our checks.
+                    # Only plain 403s qualify: challenge pages, CDN "request blocked" pages and 429s are aimed at
+                    # automated clients, and a cached homepage answering proves nothing about them.
                     root = urllib.parse.urlsplit(u)._replace(path='/', query='', fragment='').geturl()
-                    probe = check(root)
+                    probe = check(root) if rec['blk'] in ('forbidden', 'access-denied') else {'st': None, 'blk': rec['blk']}
                     pev = probe.pop('_ev', None)
                     if not probe.get('blk') and isinstance(probe.get('st'), int) and probe['st'] < 400:
                         event(type='per-page', coll=slug, host=host, blk=rec['blk'], u=root, st=probe['st'],
@@ -232,8 +234,9 @@ def run(slug, retry=False):
                         state['refused'] = 0
                         time.sleep(2.0 if retry else 0.5)
                         continue
-                    event(type='homepage-refused', coll=slug, host=host, u=root, st=probe.get('st'),
-                          blk=probe.get('blk'), ev=pev or {})
+                    if probe.get('st') is not None:
+                        event(type='homepage-refused', coll=slug, host=host, u=root, st=probe.get('st'),
+                              blk=probe.get('blk'), ev=pev or {})
                     if not state.get('ok'):
                         state['blocked'] = rec['blk']
                         print(slug, host, 'blocked:', rec['blk'], flush=True)
