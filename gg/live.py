@@ -18,7 +18,7 @@ Run with Homebrew Python (/opt/homebrew/bin/python3) on the studio: the system P
 """
 import html, json, os, random, re, socket, ssl, sys, threading, time, urllib.error, urllib.parse
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 from gg.common import COLLECTIONS, DATA, get, jsonl
 
 TITLE = re.compile(rb'<title[^>]*>(.*?)</title>', re.S | re.I)
@@ -65,7 +65,23 @@ def title_of(b):
     return re.sub(r'\s+', ' ', html.unescape(m.group(1).decode('utf-8', 'replace'))).strip()[:300]
 
 
+CAP = int(os.environ.get('GG_CAP', 120))
+_capped = ThreadPoolExecutor(256)
+
+
 def check(u):
+    """check_https() with a wall-clock cap: some servers (www.imls.gov's CSV exports) keep a connection alive with a
+    slow trickle, so the per-read timeout never fires. After CAP seconds the address is recorded as a timeout; the
+    abandoned request ends on its own when the server stops or goes quiet for 40 s."""
+    at = now()
+    fut = _capped.submit(check_https, u)
+    try:
+        return fut.result(timeout=CAP)
+    except FutureTimeout:
+        return {'u': u, 'at': at, 'st': 'timeout', 'e': 'no complete answer within %d s' % CAP}
+
+
+def check_https(u):
     """Plain http:// addresses are asked over https first (many .gov hosts no longer listen on port 80, and a
     silent port costs a full connect timeout per server address); http is tried only if https fails outright."""
     if u.startswith('http://'):
