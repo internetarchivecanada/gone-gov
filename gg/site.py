@@ -350,7 +350,7 @@ def blocks_body():
             esc(host), esc(short.get(slug, slug)), esc(', '.join('%s (%s)' % (gblocks.KIND.get(k, k), n(c)) for k, c in sorted(v['kinds'].items(), key=lambda kv: -kv[1]))),
             n(sum(v['kinds'].values())), n(v['notsent']), n(v['ok']), when(v['first']), when(v['last']), esc(evs) or '<span class="muted">not recorded</span>'))
     erows = ''.join('<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>' % (
-        when(e['at']), esc(e['host']), esc(short.get(e['coll'], e['coll'])), esc({'paused': 'Paused 15 minutes', 'marked-blocked': 'Marked blocked', 'gave-up': 'Gave up for this run'}.get(e['type'], e['type'])),
+        when(e['at']), esc(e['host']), esc(short.get(e['coll'], e['coll'])), esc({'paused': 'Paused 15 minutes', 'marked-blocked': 'Marked blocked', 'gave-up': 'Gave up for this run', 'per-page': 'Homepage answers: kept checking', 'homepage-refused': 'Homepage refused too'}.get(e['type'], e['type'])),
         esc(gblocks.KIND.get(e.get('blk'), e.get('blk', '')))) for e in reversed(events[-300:]))
     return '''<h1>When government sites refused our checks</h1>
 <p class="lede">Every time a US government website refused or limited our automated checks: challenge pages (Cloudflare, AWS), Akamai's “Access Denied”, bare 403s and 429 “Too Many Requests”. We never try to get around a refusal. Times are UTC.</p>
@@ -358,7 +358,7 @@ def blocks_body():
 <h2>By site</h2>
 <div class="scroll"><table class="tab"><thead><tr><th>Host</th><th>Collection</th><th>How it refused</th><th class="num">Refused</th><th class="num">Not sent</th><th class="num">Answered</th><th>First refusal</th><th>Latest refusal</th><th>Latest server headers</th></tr></thead><tbody>%s</tbody></table></div>
 <h2>Pauses and decisions</h2>
-<p>Recorded from 26 November 2026. A site that answered earlier and then refused 15 in a row gets a 15-minute pause; after three pauses it is left for a later run.</p>
+<p>Recorded from 26 November 2026. After 15 refusals in a row we ask for the site's homepage. If it answers, the refusals were pages closed to everyone and checking goes on. If not, a site that never answered is marked blocked, and one that answered earlier gets a 15-minute pause; after three pauses it is left for a later run.</p>
 %s''' % (''.join(trs) or '<tr><td colspan="9">None so far.</td></tr>',
         ('<div class="scroll"><table class="tab"><thead><tr><th>When</th><th>Host</th><th>Collection</th><th>What we did</th><th>Refusal</th></tr></thead><tbody>%s</tbody></table></div>' % erows) if erows else '<p class="muted">None recorded yet.</p>')
 

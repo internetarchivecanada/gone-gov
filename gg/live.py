@@ -220,6 +220,20 @@ def run(slug, retry=False):
             if rec.get('blk'):
                 state['refused'] = state.get('refused', 0) + 1
                 if state['refused'] >= 15:
+                    # 15 refusals in a row: ask for the homepage before deciding. If it answers, these were pages
+                    # that are closed to everyone (e.g. comment-reply forms), not a refusal of our checks.
+                    root = urllib.parse.urlsplit(u)._replace(path='/', query='', fragment='').geturl()
+                    probe = check(root)
+                    pev = probe.pop('_ev', None)
+                    if not probe.get('blk') and isinstance(probe.get('st'), int) and probe['st'] < 400:
+                        event(type='per-page', coll=slug, host=host, blk=rec['blk'], u=root, st=probe['st'],
+                              note='15 addresses in a row refused, but the homepage answers: treated as pages closed to everyone, checks continue')
+                        state['ok'] = True
+                        state['refused'] = 0
+                        time.sleep(2.0 if retry else 0.5)
+                        continue
+                    event(type='homepage-refused', coll=slug, host=host, u=root, st=probe.get('st'),
+                          blk=probe.get('blk'), ev=pev or {})
                     if not state.get('ok'):
                         state['blocked'] = rec['blk']
                         print(slug, host, 'blocked:', rec['blk'], flush=True)
