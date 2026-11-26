@@ -11,7 +11,7 @@ from gg import blocks as gblocks
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BASE = 'https://wayback-labs.sf.archive.org/gone-gov/'
-V = '14'
+V = '15'
 ICON = '<svg class="ic" aria-hidden="true"><use href="#i-%s"/></svg>'
 STATUS_LABEL = {'gone': 'Gone', 'away': 'Redirected away', 'moved': 'Moved', 'live': 'Still online',
                 'blocked': "Can't be checked", 'unclear': 'Unclear', 'pending': 'Not yet checked'}
@@ -37,6 +37,8 @@ def code_of(r, cls):
             return 'dns'
         if st == 'refused':
             return 'refused'
+        if r.get('s3'):
+            return 's3'
         if isinstance(st, int) and 200 <= st < 300:
             return 'soft'
         return str(st)
@@ -384,7 +386,7 @@ ABOUT = '''<h1>About</h1>
 <p>The addresses come from archives of ten US government websites made between November 2024 and April 2025: EPA, CDC, the Department of Education, FEMA, USAID, the Global Change Research Program, Climate.gov, IMLS, Sea Level Change and COVID.gov. We read each archive's list of pages and its capture index straight out of its published WACZ files (only the small index parts, using range requests). Images, scripts, style sheets and data feeds are left out; web pages and documents (PDF, Word, Excel, PowerPoint, CSV) are kept. Addresses are counted once, ignoring http/https, “www.” and a trailing slash.</p>
 <h2>How each address is checked</h2>
 <ul>
-<li><b>Gone</b>: the live site answers 404 or 410, serves a “page not found” page, or the site's name no longer resolves at all.</li>
+<li><b>Gone</b>: the live site answers 404 or 410, serves a “page not found” page, or the site's name no longer resolves at all. Also counted as gone: files whose site answers 403 with Amazon S3's “AccessDenied” message (for example old PDFs under www.epa.gov/sites/default/files/). That is how S3 answers for a file that is not in its storage; files that still exist on the same site answer normally, so this is not a refusal of our checks.</li>
 <li><b>Redirected away</b>: the address now forwards to a homepage, or to a page that at least 25 old addresses land on (for example COVID.gov's pages now forward to a single White House page).</li>
 <li><b>Moved elsewhere</b>: forwards to a specific other page; the content is probably still online. Counted but not listed.</li>
 <li><b>Site refuses checks</b>: the site refuses automated requests: a Cloudflare challenge (www.ed.gov, www.usaid.gov), an AWS challenge (climate.gov) or Akamai's “Access Denied” (www.fema.gov). We don't try to get around it, so these are left out of the lists. On www.ed.gov the Wayback Machine's own crawler gets the same refusal. A site that answers at first and then starts refusing is treated as rate limiting: the check pauses and asks again later. <a href="blocks.html">Every refusal and limit, by site</a>.</li>

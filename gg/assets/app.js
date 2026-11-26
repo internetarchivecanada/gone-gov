@@ -1,7 +1,7 @@
 (function(){
   var app=document.getElementById('app'); if(!app) return;
   var slug=app.dataset.slug, rel=app.dataset.rel||'';
-  var CODE={'404':'404 Not Found','410':'410 Gone','dns':'Website no longer exists','refused':'Server refuses connections','soft':'Shows a “not found” page'};
+  var CODE={'404':'404 Not Found','410':'410 Gone','dns':'Website no longer exists','refused':'Server refuses connections','soft':'Shows a “not found” page','s3':'File no longer in storage (403 AccessDenied)'};
   function docIcon(path){var e=(path.split('?')[0].split('.').pop()||'').toLowerCase();
     return e==='pdf'?'<svg class="ic big" role="img" aria-label="PDF"><use href="#i-pdf"/></svg>':
       '<svg class="ic big" aria-hidden="true"><use href="#i-doc"/></svg><span class="badge doc">'+esc(e.toUpperCase()||'Document')+'</span>'}

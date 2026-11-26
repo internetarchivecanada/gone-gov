@@ -96,8 +96,16 @@ def check(u):
             rec['blk'] = 'aws-waf'
         elif e.code == 429:
             rec['blk'] = 'rate'
-        elif e.code == 403 and (b'Access Denied' in body or 'Akamai' in server):
+        elif e.code == 403 and b'<Code>AccessDenied</Code>' in body:
+            # Amazon S3 (often behind CloudFront) answers this for a file that is not in the bucket; files that still
+            # exist on the same site answer 200, so this is a missing file, not a refusal of our requests
+            rec['s3'] = 'AccessDenied'
+        elif e.code == 403 and ('AkamaiGHost' in server or b'edgesuite.net' in body or AKAMAI_REF.search(body)):
             rec['blk'] = 'akamai'
+        elif e.code == 403 and b'could not be satisfied' in body and 'cloudfront' in (e.headers.get('Via') or '').lower():
+            rec['blk'] = 'cloudfront'
+        elif e.code == 403 and b'Access Denied' in body:
+            rec['blk'] = 'access-denied'
         elif e.code == 403:
             rec['blk'] = 'forbidden'
         elif e.code in (404, 410):

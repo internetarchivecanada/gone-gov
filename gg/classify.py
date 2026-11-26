@@ -3,7 +3,8 @@
 live     answers 200 at the same address (or a trivial redirect: http->https, www, trailing slash)
 moved    redirects to a specific other page (one-to-one); probably still online elsewhere
 away     redirects to a homepage, or to a page that many old addresses now land on (catch-all)
-gone     404/410, a "page not found" page served with 200, or the host no longer exists / refuses connections
+gone     404/410, a "page not found" page served with 200, Amazon S3's 403 AccessDenied for a missing file,
+         or the host no longer exists / refuses connections
 blocked  the site refuses automated requests (Cloudflare / AWS WAF challenge, Akamai "Access Denied", 403, 429)
 unclear  other errors: 401/403, 429, 5xx, timeouts, TLS failures
 """
@@ -36,7 +37,7 @@ def status(r, catch):
     if isinstance(st, int):
         f = r.get('f')
         redirected = f and norm(f) != norm(r['u'])
-        if st in GONE_CODES:
+        if st in GONE_CODES or (st == 403 and r.get('s3') == 'AccessDenied'):
             return 'gone'
         if st in (200, 203):
             if redirected:

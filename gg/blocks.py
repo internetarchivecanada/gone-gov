@@ -13,7 +13,7 @@ from collections import defaultdict
 from gg.common import COLLECTIONS, DATA, jsonl
 
 KIND = {'cloudflare': 'Cloudflare challenge', 'aws-waf': 'AWS WAF challenge', 'challenge': 'Challenge page (202)',
-        'akamai': 'Akamai “Access Denied”', 'forbidden': '403 Forbidden (no challenge page)', 'rate': '429 Too Many Requests'}
+        'akamai': 'Akamai “Access Denied”', 'cloudfront': 'CloudFront “Request blocked”', 'access-denied': '403 “Access Denied” (service not identified)', 'forbidden': '403 Forbidden (no challenge page)', 'rate': '429 Too Many Requests'}
 
 
 def hostname(u):
