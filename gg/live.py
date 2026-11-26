@@ -11,6 +11,8 @@ refuses automated requests (Cloudflare or AWS WAF challenge, Akamai "Access Deni
 row without ever answering is marked blocked and its remaining addresses are not requested. A host that did
 answer before is assumed to be rate limiting: pause 15 minutes, give up for this run after 3 pauses.
 A host whose name no longer resolves is marked dns for every address without further requests.
+Every refusal or limit (and every pause, block decision and give-up) is also written to data/blocks/events.jsonl
+with the answering server's identifying headers, for gg.blocks and the site's blocks page.
 No challenge solving, no browser impersonation: the User-Agent names this project.
 Run with Homebrew Python (/opt/homebrew/bin/python3) on the studio: the system Python's LibreSSL has no TLS 1.3.
 """
@@ -22,6 +24,34 @@ from gg.common import COLLECTIONS, DATA, get, jsonl
 TITLE = re.compile(rb'<title[^>]*>(.*?)</title>', re.S | re.I)
 RECHECK_AGE = int(os.environ.get("GG_RECHECK_AGE", 6 * 3600))
 lock = threading.Lock()
+EVIDENCE_HEADERS = ('Server', 'Retry-After', 'cf-ray', 'cf-mitigated', 'x-amzn-waf-action', 'x-amzn-requestid',
+                    'x-akamai-request-id', 'Akamai-GRN', 'x-iinfo', 'x-cdn', 'Via', 'X-Cache')
+AKAMAI_REF = re.compile(rb'Reference&#32;#?([0-9a-f.]+)|Reference #([0-9a-f.]+)', re.I)
+_events = None
+
+
+def event(**ev):
+    """Append one block/limit event (thread-safe)."""
+    global _events
+    with lock:
+        if _events is None:
+            os.makedirs(os.path.join(DATA, 'blocks'), exist_ok=True)
+            _events = open(os.path.join(DATA, 'blocks', 'events.jsonl'), 'a')
+        ev.setdefault('at', now())
+        _events.write(json.dumps(ev) + '\n')
+        _events.flush()
+
+
+def evidence(headers, body=b''):
+    ev = {}
+    for h in EVIDENCE_HEADERS:
+        v = headers.get(h) if headers else None
+        if v:
+            ev[h.lower()] = v[:120]
+    m = AKAMAI_REF.search(body or b'')
+    if m:
+        ev['akamai-ref'] = (m.group(1) or m.group(2)).decode('ascii', 'replace')
+    return ev
 
 
 def now():
@@ -44,6 +74,7 @@ def check(u):
         rec['ct'] = ct.split(';')[0][:60]
         if r.status == 202 or r.headers.get('x-amzn-waf-action'):
             rec['blk'] = 'aws-waf' if r.headers.get('x-amzn-waf-action') else 'challenge'
+            rec['_ev'] = evidence(r.headers)
         elif 'html' in ct:
             rec['t'] = title_of(r.read(65536))
         r.close()
@@ -71,6 +102,8 @@ def check(u):
             rec['blk'] = 'forbidden'
         elif e.code in (404, 410):
             rec['t'] = title_of(body)
+        if rec.get('blk') or e.code in (401, 503) or e.headers.get('Retry-After'):
+            rec['_ev'] = evidence(e.headers, body)
     except urllib.error.URLError as e:
         reason = e.reason
         if isinstance(reason, socket.gaierror):
@@ -169,20 +202,32 @@ def run(slug, retry=False):
             if state.get('stop'):
                 return
             rec = check(u)
+            ev = rec.pop('_ev', None)
             write(rec)
+            if ev is not None:
+                event(type='refused' if rec.get('blk') else 'limited', coll=slug, host=host, u=u, st=rec.get('st'),
+                      blk=rec.get('blk'), ev=ev, at=rec['at'])
+            elif rec['st'] in ('refused', 'timeout') or (rec['st'] == 'err' and 'reset' in rec.get('e', '').lower()):
+                event(type='no-answer', coll=slug, host=host, u=u, st=rec['st'], e=rec.get('e', ''), at=rec['at'])
             if rec.get('blk'):
                 state['refused'] = state.get('refused', 0) + 1
                 if state['refused'] >= 15:
                     if not state.get('ok'):
                         state['blocked'] = rec['blk']
                         print(slug, host, 'blocked:', rec['blk'], flush=True)
+                        event(type='marked-blocked', coll=slug, host=host, blk=rec['blk'],
+                              note='refused 15 requests in a row and never answered; its remaining addresses are not requested this run')
                     else:
                         pauses += 1
                         if pauses > 3:
                             state['stop'] = True
                             print(slug, host, 'still refusing after 3 pauses; left for a later run', flush=True)
+                            event(type='gave-up', coll=slug, host=host, blk=rec['blk'],
+                                  note='still refusing after three 15-minute pauses; left for a later run')
                             return
                         print(slug, host, 'refusing (%s); pausing 15 min' % rec['blk'], flush=True)
+                        event(type='paused', coll=slug, host=host, blk=rec['blk'],
+                              note='answered earlier, then refused 15 in a row: treated as rate limiting, pausing 15 minutes')
                         time.sleep(900)
                         state['refused'] = 0
             elif rec['st'] not in ('timeout', 'err'):

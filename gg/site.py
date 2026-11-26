@@ -7,6 +7,7 @@ import html, json, os, re, shutil, sys, time, urllib.parse
 from collections import Counter, defaultdict
 from gg.common import COLLECTIONS, DATA, jsonl, norm, host_of, ext_of
 from gg.classify import catchalls, status, trap_finder
+from gg import blocks as gblocks
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BASE = 'https://wayback-labs.sf.archive.org/gone-gov/'
@@ -228,7 +229,7 @@ def build(out):
             esc(h), n(sum(hc[k] for k in STATUS_LABEL)), n(hc['gone']), n(hc['away']), n(hc['moved']), n(hc['live']), n(hc['blocked'] + hc['unclear'] + hc['pending'])) for h, hc in htab[:40])
         nosec = ''
         if c.get('blocked'):
-            nosec = '<p class="note"><b>%s addresses can\'t be checked.</b> Their site refuses automated requests (a Cloudflare or AWS challenge page, or Akamai\'s “Access Denied”). We don\'t try to get around that, so these addresses are left out of the list below rather than guessed at. Some refusals may lift; they are asked again on later passes.</p>' % n(c['blocked'])
+            nosec = '<p class="note"><b>%s addresses can\'t be checked.</b> Their site refuses automated requests (a Cloudflare or AWS challenge page, or Akamai\'s “Access Denied”). We don\'t try to get around that, so these addresses are left out of the list below rather than guessed at. Some refusals may lift; they are asked again on later passes. <a href="../blocks.html">Every refusal, by site</a>.</p>' % n(c['blocked'])
         body = '''<p class="crumb"><a href="../index.html">Overview</a> › %s</p>
 <h1>%s</h1>
 <p class="lede">%s archived addresses (%s documents) from %s, captured %s. Checked on the live web: %s so far.</p>
@@ -270,8 +271,8 @@ def build(out):
         wb_text = 'have a working copy in the Wayback Machine (%s of %s)' % (n(total['wb']), n(looked))
     progress = ''
     if total['pending'] or total['vchecked'] < total['videos']:
-        progress = '<p class="note">Checks are still running: %s of %s addresses and %s of %s videos checked so far. This page rebuilds every 30 minutes.</p>' % (
-            n(checked), n(total['all']), n(total['vchecked']), n(total['videos']))
+        progress = '<p class="note">Checks are still running: %s of %s addresses and %s of %s videos checked so far. Last updated %s.</p>' % (
+            n(checked), n(total['all']), n(total['vchecked']), n(total['videos']), time.strftime('%-d %B %Y, %H:%M UTC', time.gmtime()))
     body = '''<section class="hero"><h1>Pages the US government took down, still in the archive</h1>
 <p class="lede">In the weeks around the January 2025 change of administration, %s pages and documents from ten US government websites were archived. We checked each address on today's live web. <b>%s are gone or now redirect somewhere unrelated</b>%s.</p></section>
 %s
@@ -324,14 +325,40 @@ def build(out):
 <p class="lede">The archived pages embedded %s distinct YouTube videos. We asked YouTube about each one: <b>%s of the %s checked no longer play</b> — made private, removed, or their channel closed. The Wayback Machine link is its latest capture of the video's YouTube page (the page, which may not include the video itself).</p>
 %s%s''' % (n(total['videos']), n(total['vgone']), n(total['vchecked']), progress, ''.join(vrows) or '<p>No results yet.</p>')
     open(os.path.join(out, 'videos.html'), 'w').write(page('Videos – Gone from .gov', vbody, '', 'videos', 'YouTube videos embedded on archived US government pages that no longer play.'))
+    open(os.path.join(out, 'blocks.html'), 'w').write(page('Refusals – Gone from .gov', blocks_body(), '', '', 'Every time a US government website refused or limited our checks.'))
     open(os.path.join(out, 'about.html'), 'w').write(page('About – Gone from .gov', ABOUT % {'built': time.strftime('%-d %B %Y %H:%M UTC', time.gmtime()), 'traps': n(total['traps']), 'archived_err': n(total['archived_err'])}, '', 'about', 'How Gone from .gov was made.'))
     open(os.path.join(out, '404.html'), 'w').write(page('Not found – Gone from .gov', '<h1>Not here either</h1><p>This address isn\'t part of the site. <a href="index.html">Back to the overview</a>.</p>', '/gone-gov/'))
     open(os.path.join(out, 'robots.txt'), 'w').write('User-agent: *\nAllow: /\nSitemap: %ssitemap.xml\n' % BASE)
-    urls = ['', 'pdfs.html', 'videos.html', 'about.html'] + ['c/%s.html' % s['slug'] for s in summary]
+    urls = ['', 'pdfs.html', 'videos.html', 'about.html', 'blocks.html'] + ['c/%s.html' % s['slug'] for s in summary]
     open(os.path.join(out, 'sitemap.xml'), 'w').write('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n%s</urlset>\n' % ''.join(
         '<url><loc>%s%s</loc><lastmod>%s</lastmod></url>\n' % (BASE, u, time.strftime('%Y-%m-%d', time.gmtime())) for u in urls))
     json.dump({'built': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()), 'total': total, 'collections': summary}, open(os.path.join(out, 'data', 'summary.json'), 'w'), indent=1)
     print('built', out, dict(total))
+
+def blocks_body():
+    rows, events, evidence = gblocks.collect()
+    short = {c[0]: c[1] for c in COLLECTIONS}
+    def when(t):
+        return esc(gblocks.ts(t)) if t else '<span class="muted">–</span>'
+    trs = []
+    for (slug, host), v in sorted(rows.items(), key=lambda kv: -(sum(kv[1]['kinds'].values()) + kv[1]['notsent'])):
+        ev = evidence.get((slug, host), {}).get('ev', {})
+        evs = '; '.join('%s: %s' % (k, v2) for k, v2 in ev.items())
+        trs.append('<tr><td>%s</td><td>%s</td><td>%s</td><td class="num">%s</td><td class="num">%s</td><td class="num">%s</td><td>%s</td><td>%s</td><td class="small">%s</td></tr>' % (
+            esc(host), esc(short.get(slug, slug)), esc(', '.join('%s (%s)' % (gblocks.KIND.get(k, k), n(c)) for k, c in sorted(v['kinds'].items(), key=lambda kv: -kv[1]))),
+            n(sum(v['kinds'].values())), n(v['notsent']), n(v['ok']), when(v['first']), when(v['last']), esc(evs) or '<span class="muted">not recorded</span>'))
+    erows = ''.join('<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>' % (
+        when(e['at']), esc(e['host']), esc(short.get(e['coll'], e['coll'])), esc({'paused': 'Paused 15 minutes', 'marked-blocked': 'Marked blocked', 'gave-up': 'Gave up for this run'}.get(e['type'], e['type'])),
+        esc(gblocks.KIND.get(e.get('blk'), e.get('blk', '')))) for e in reversed(events[-300:]))
+    return '''<h1>When government sites refused our checks</h1>
+<p class="lede">Every time a US government website refused or limited our automated checks: challenge pages (Cloudflare, AWS), Akamai's “Access Denied”, bare 403s and 429 “Too Many Requests”. We never try to get around a refusal. Times are UTC.</p>
+<p><b>Refused</b> counts requests the site actually refused. <b>Not sent</b> counts addresses whose latest check was skipped because the site had already refused 15 requests in a row without ever answering. <b>Answered</b> counts requests the same site did answer, so a site with both was limiting us rather than shutting us out. A bare 403 with no challenge page can also be a page that is simply closed to the public, not a block. The server headers (from 26 November 2026 on) show which service sent the refusal.</p>
+<h2>By site</h2>
+<div class="scroll"><table class="tab"><thead><tr><th>Host</th><th>Collection</th><th>How it refused</th><th class="num">Refused</th><th class="num">Not sent</th><th class="num">Answered</th><th>First refusal</th><th>Latest refusal</th><th>Latest server headers</th></tr></thead><tbody>%s</tbody></table></div>
+<h2>Pauses and decisions</h2>
+<p>Recorded from 26 November 2026. A site that answered earlier and then refused 15 in a row gets a 15-minute pause; after three pauses it is left for a later run.</p>
+%s''' % (''.join(trs) or '<tr><td colspan="9">None so far.</td></tr>',
+        ('<div class="scroll"><table class="tab"><thead><tr><th>When</th><th>Host</th><th>Collection</th><th>What we did</th><th>Refusal</th></tr></thead><tbody>%s</tbody></table></div>' % erows) if erows else '<p class="muted">None recorded yet.</p>')
 
 SEG = [('gone', 'Gone'), ('away', 'Redirected away'), ('moved', 'Moved elsewhere'), ('live', 'Still online'),
        ('blocked', "Site refuses checks"), ('unclear', 'Unclear (errors)'), ('pending', 'Not checked yet')]
@@ -360,7 +387,7 @@ ABOUT = '''<h1>About</h1>
 <li><b>Gone</b>: the live site answers 404 or 410, serves a “page not found” page, or the site's name no longer resolves at all.</li>
 <li><b>Redirected away</b>: the address now forwards to a homepage, or to a page that at least 25 old addresses land on (for example COVID.gov's pages now forward to a single White House page).</li>
 <li><b>Moved elsewhere</b>: forwards to a specific other page; the content is probably still online. Counted but not listed.</li>
-<li><b>Site refuses checks</b>: the site refuses automated requests: a Cloudflare challenge (www.ed.gov, www.usaid.gov), an AWS challenge (climate.gov) or Akamai's “Access Denied” (www.fema.gov). We don't try to get around it, so these are left out of the lists. On www.ed.gov the Wayback Machine's own crawler gets the same refusal. A site that answers at first and then starts refusing is treated as rate limiting: the check pauses and asks again later.</li>
+<li><b>Site refuses checks</b>: the site refuses automated requests: a Cloudflare challenge (www.ed.gov, www.usaid.gov), an AWS challenge (climate.gov) or Akamai's “Access Denied” (www.fema.gov). We don't try to get around it, so these are left out of the lists. On www.ed.gov the Wayback Machine's own crawler gets the same refusal. A site that answers at first and then starts refusing is treated as rate limiting: the check pauses and asks again later. <a href="blocks.html">Every refusal and limit, by site</a>.</li>
 <li><b>Unclear (errors)</b>: timeouts, server errors and other answers that say nothing about the page.</li>
 <li><b>Not checked yet</b>: still in the queue.</li>
 </ul>
