@@ -8,7 +8,7 @@ is more than six hours old.
 
 Per-host politeness: one request at a time (two for hosts with >50,000 addresses), 0.5 s apart. A host that
 refuses automated requests (Cloudflare or AWS WAF challenge, Akamai "Access Denied", bare 403, 429) 15 times in a
-row without ever answering is marked blocked and its remaining addresses are not requested. A host that did
+row without ever answering (in this or an earlier run) is marked blocked and its remaining addresses are not requested. A host that did
 answer before is assumed to be rate limiting: pause 15 minutes, give up for this run after 3 pauses.
 A host whose name no longer resolves is marked dns for every address without further requests.
 Every refusal or limit (and every pause, block decision and give-up) is also written to data/blocks/events.jsonl
@@ -16,7 +16,7 @@ with the answering server's identifying headers, for gg.blocks and the site's bl
 No challenge solving, no browser impersonation: the User-Agent names this project.
 Run with Homebrew Python (/opt/homebrew/bin/python3) on the studio: the system Python's LibreSSL has no TLS 1.3.
 """
-import html, json, os, re, socket, ssl, sys, threading, time, urllib.error, urllib.parse
+import html, json, os, random, re, socket, ssl, sys, threading, time, urllib.error, urllib.parse
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from gg.common import COLLECTIONS, DATA, get, jsonl
@@ -66,6 +66,19 @@ def title_of(b):
 
 
 def check(u):
+    """Plain http:// addresses are asked over https first (many .gov hosts no longer listen on port 80, and a
+    silent port costs a full connect timeout per server address); http is tried only if https fails outright."""
+    if u.startswith('http://'):
+        rec = check1('https://' + u[7:])
+        if rec.get('st') not in ('dns', 'tls', 'refused', 'timeout', 'err'):
+            rec['u'] = u
+            if 'f' not in rec:
+                rec['f'] = 'https://' + u[7:]
+            return rec
+    return check1(u)
+
+
+def check1(u):
     rec = {'u': u, 'at': now()}
     try:
         r = get(u, timeout=40, headers={'Accept': 'text/html,application/xhtml+xml,application/pdf,*/*;q=0.8'})
@@ -183,7 +196,14 @@ def run(slug, retry=False):
                 resolves[h] = dns_ok(h, tries=1)
             if resolves[h]:
                 todo.append(d['u'])
+    answered = set()
+    for d in last.values():
+        st = d.get('st')
+        if isinstance(st, int) and st < 400 and not d.get('blk'):
+            answered.add(urllib.parse.urlsplit(d['u']).netloc.lower())
     byhost = defaultdict(list)
+    random.seed(slug)
+    random.shuffle(todo)  # so a run of one kind of link (e.g. comment-reply forms) doesn't decide for a whole site
     for u in todo:
         byhost[urllib.parse.urlsplit(u).netloc.lower()].append(u)
     print(slug, len(todo), 'to check on', len(byhost), 'hosts', time.strftime('%H:%M:%S'), flush=True)
@@ -263,7 +283,7 @@ def run(slug, retry=False):
     jobs = []
     with ThreadPoolExecutor(48) as ex:
         for host, urls in sorted(byhost.items(), key=lambda kv: -len(kv[1])):
-            state = {}
+            state = {'ok': True} if host in answered else {}
             h = host.split(':')[0]
             if not dns_ok(h[4:] if h.startswith('www.') else h):
                 state['dns'] = True
